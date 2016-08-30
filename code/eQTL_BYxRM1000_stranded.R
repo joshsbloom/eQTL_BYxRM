@@ -347,13 +347,12 @@ background.QTL.OD = find.background.QTL(covariates.OD, t.tpm.matrix, pheno.scale
 peakList.OD = mapQTL(covariates.OD, background.QTL.OD,
                   t.tpm.matrix, pheno.scaled.OD, gdata, gdata.scaled,
                   n.perm=1000, FDR.thresh=.05)
-save(peakList.OD, file='/data/eQTL/RData/peakList_batchOD.RData')
+#save(peakList.OD, file='/data/eQTL/RData/peakList_batchOD.RData')
 #load('/data/eQTL/RData/peakList_batchOD.RData')
 
 # Total peak count
 sum(sapply(sapply(peakList.OD, function(x) { sapply(x, function(y) nrow(y) ) } ), sum))
-##[1] 34217
-## rerun 33986
+#36,498
 
 # table of peaks 
 all.peaks.OD=buildPeakListDF(peakList.OD,gdata,gene.GR, marker.GR)
@@ -362,7 +361,6 @@ save(all.peaks.OD, file='/data/eQTL/RData/all_peaks_OD.RData')
 png('/data/eQTL/plots/eQTL_map_1920x1920.png', width=1920, height=1920)
 eQTL_bigPlot(all.peaks.OD, gcoord.key,marker.GR)
 dev.off()
-
 
 # find hotspots
 peaks.per.gene=split(all.peaks.OD, all.peaks.OD$gene)
@@ -378,8 +376,8 @@ median(abs(cir-cil)[all.peaks.OD$cis])
 residual.pheno=residuals(lm(t.tpm.matrix~covariates.OD) )
 pheno.scaled=(scale(residual.pheno))
 #naive local model
-cisModel=rep(NA, 5782)
-for(i in 1:5782) {
+cisModel=rep(NA, 5718)
+for(i in 1:5718) {
     print(i)
     cisModel[i]=anova(lm(t.tpm.matrix[,i]~covariates.OD)
                       ,lm(t.tpm.matrix[,i]~covariates.OD+gdata[,closest.marker.to.transcript[i]]) )$'Pr(>F)'[2]
@@ -389,8 +387,8 @@ for(i in 1:5782) {
 #2036
 #names(which(cisModel[1:6616]<(.05/6616))))
 
-sum(cisModel<(.05/5782)) #6288)) # 2549 #2392
-sum(qvalue(cisModel)$qvalue<.05) # 4523 #4244
+sum(cisModel<(.05/5718)) #2460 
+sum(qvalue(cisModel)$qvalue<.05) #4241
 
 # new code to re-localize QTL
 #tpm.q=apply(scale(t.tpm.matrix),2, function(x)  x[(x>quantile(x,.995))]  ) 
@@ -401,6 +399,8 @@ peaks.per.chr=split(all.peaks.OD, all.peaks.OD$chr)
 
 # would simplify things if we precompute chromosome QTL and blup residuals
 # then add back code to relocalize hotspots
+# load this in workspace for hotspot bootstraps 
+load('/data/eQTL/RData/gdata.RData')
 cvec=(do.call('rbind', strsplit(colnames(gdata), ':'))[,1])
 chromosomes=paste0('chr', as.roman(1:16))
 gdata.s.by.chr=list()
@@ -417,14 +417,13 @@ names(genetic.map.c)=as.vector(unlist(sapply(genetic.map, names)))
 # do 2 locus scan --------------begin by pruning marker data by LD  ---------------------------------------------------------------------------------------------------------
 gdata.downsampled=downsampleMarkers(gdata.by.chr, gdata.s.by.chr)
 
-
-#save(gdata, file='/data/eQTL/RData/2D/gdata.RData')
-load('/data/eQTL/RData/2D/gdata.RData')
-save(gdata.downsampled, file='/data/eQTL/RData/stranded/2D/gdata.downsampled.RData')
+#save(gdata, file='/data/eQTL/RData/gdata.RData')
+#load('/data/eQTL/RData/2D/gdata.RData')
+#save(gdata.downsampled, file='/data/eQTL/RData/gdata.downsampled.RData')
 
 # residualize trait (remove additive effects) (note that output here is not scaled)
 pheno.additive.removed=removeAdditiveEffects(t.tpm.matrix, peaks.per.gene, covariates.OD, gdata)
-#save(pheno.additive.removed, file='/data/eQTL/RData/stranded/2D/pheno.additive.removed.RData')
+#save(pheno.additive.removed, file='/data/eQTL/RData/pheno.additive.removed.RData')
 
 load('/data/eQTL/RData/2D/pheno.additive.removed.RData')
 
@@ -432,99 +431,86 @@ pheno.additive.removed.scaled=scale(pheno.additive.removed)
 # sanity check that additive signal is gone
 #scanoneLODS.ar=fasterLOD(nrow(pheno.additive.removed.scaled),pheno.additive.removed.scaled,gdata.scaled, betas=TRUE)
 
-dir.create('/data/eQTL/RData/stranded/2D/real/')
-
-# speed up this step by only retaining peak positions for each chromosome pair (run aggreatePeaks within do2locusScan)
-do2locusScan(pheno.additive.removed.scaled, gdata.downsampled, '/data/eQTL/RData/stranded/2D/real/', marker.gap=20)
-
-# modified JB 08/29/16 (do peak detection on the fly)
-do2locusScan.reduced_output(pheno.additive.removed.scaled, gdata.downsampled, '/data/eQTL/RData/stranded/2D/real/', all.peaks.DS, marker.gap=20)
-
-# permute phenotype residuals 
-set.seed(1)
-for(i in 1:5) {
-    dir.out=paste0('/data/eQTL/RData/stranded/2D/perm/', i, '/')
-    dir.create(dir.out)
-    do2locusScan(pheno.additive.removed.scaled[sample(1:nrow(pheno.additive.removed.scaled)),], gdata.downsampled, dir.out, marker.gap=20)
-}
 marker.GR.downsampled=marker.GR[match(as.vector(unlist(sapply(gdata.downsampled, colnames))), marker.GR$mname),]
 all.peaks.DS=all.peaks.OD
 all.peaks.DS$marker.ds.ind=findInterval(all.peaks.OD$marker.gcoord, marker.GR.downsampled$gcoord)
 all.peaks.DS$pmarker.ds=marker.GR.downsampled$mname[all.peaks.DS$marker.ds.ind]
 
-save(all.peaks.DS, file='/data/eQTL/RData/stranded/all.peaks.DS.RData')
+#save(all.peaks.DS, file='/data/eQTL/RData/all.peaks.DS.RData')
 load('/data/eQTL/RData/all.peaks.DS.RData')
 
-# manually relocated matrices to /d2
-aggregatePeaks('/media/jbloom/d2/eQTL_2D/stranded/real/',   '/data/eQTL/RData/stranded/2D/peaks2D.real.RData'   ,'/data/eQTL/RData/stranded/2D/mpeaks2D.real.RData',    all.peaks.DS)
-aggregatePeaks('/media/jbloom/d2/eQTL_2D/stranded/perm/1/', '/data/eQTL/RData/stranded/2D/peaks2D.perm.1.RData' ,'/data/eQTL/RData/stranded/2D/mpeaks2D.perm.1.RData',  all.peaks.DS)
-aggregatePeaks('/media/jbloom/d2/eQTL_2D/stranded/perm/2/', '/data/eQTL/RData/stranded/2D/peaks2D.perm.2.RData' ,'/data/eQTL/RData/stranded/2D/mpeaks2D.perm.2.RData',  all.peaks.DS)
-aggregatePeaks('/media/jbloom/d2/eQTL_2D/stranded/perm/3/', '/data/eQTL/RData/stranded/2D/peaks2D.perm.3.RData' ,'/data/eQTL/RData/stranded/2D/mpeaks2D.perm.3.RData',  all.peaks.DS)
-aggregatePeaks('/media/jbloom/d2/eQTL_2D/stranded/perm/4/', '/data/eQTL/RData/stranded/2D/peaks2D.perm.4.RData' ,'/data/eQTL/RData/stranded/2D/mpeaks2D.perm.4.RData',  all.peaks.DS)
-aggregatePeaks('/media/jbloom/d2/eQTL_2D/stranded/perm/5/', '/data/eQTL/RData/stranded/2D/peaks2D.perm.5.RData' ,'/data/eQTL/RData/stranded/2D/mpeaks2D.perm.5.RData',  all.peaks.DS)
+obs2D=lapply(do2locusScan.reduced_output(pheno.additive.removed.scaled, 
+                                         gdata.downsampled, all.peaks.DS, marker.gap=20), collapse2D)
+set.seed(1)
+perm2D=list()
+for(i in 1:5) {
+    perm2D[[as.character(i)]]=lapply(do2locusScan.reduced_output(pheno.additive.removed.scaled[sample(1:nrow(pheno.additive.removed.scaled)),], 
+                                                                 gdata.downsampled, all.peaks.DS, marker.gap=20), collapse2D)
+}
+saveRDS(obs2D , file= '/data/eQTL/RData/obs2D.peaks.RDS')
+saveRDS(perm2D, file='/data/eQTL/RData/perm2D.peaks.RDS')
+
+obscnt=lapply(obs2D, function(o){ 
+                  v=sapply(seq(2,8,.05), function(x) sum(o$lod>x)) 
+                  names(v)=seq(2,8,.05)
+                  return(v)    
+                      } )
+permcnt=lapply(perm2D, function(y){ 
+          lapply(y, function(o){ 
+                  v=sapply(seq(2,8,.05), function(x) sum(o$lod>x)) 
+                  names(v)=seq(2,8,.05)
+                  return(v)    
+                      } ) })
 
 
-obs2D=readRDS('/data/eQTL/RData/stranded/2D/peaks2D.real.RData')
-perm1.2D=readRDS('/data/eQTL/RData/stranded/2D/peaks2D.perm.1.RData')
-perm2.2D=readRDS('/data/eQTL/RData/stranded/2D/peaks2D.perm.2.RData')
-perm3.2D=readRDS('/data/eQTL/RData/stranded/2D/peaks2D.perm.3.RData')
-perm4.2D=readRDS('/data/eQTL/RData/stranded/2D/peaks2D.perm.4.RData')
-perm5.2D=readRDS('/data/eQTL/RData/stranded/2D/peaks2D.perm.5.RData')
+permcnt.full=rowMeans(sapply(permcnt, function(x) x[[1]]))
+permcnt.marginal=rowMeans(sapply(permcnt, function(x) x[[2]]))
 
-o=collapse2D(obs2D); 
-p1=collapse2D(perm1.2D); p2=collapse2D(perm2.2D); p3=collapse2D(perm3.2D); p4=collapse2D(perm4.2D); p5=collapse2D(perm5.2D)
-obscnt=sapply(seq(2,8,.05), function(x) sum(o$lod>x))
-names(obscnt)=seq(2,8,.05)
+permcnt.full/obscnt$full.scan.peaks
+# 7.5 5%
+# 7.15 10%
 
-p1cnt=sapply(seq(2,8,.05), function(x) sum(p1$lod>x))
-p2cnt=sapply(seq(2,8,.05), function(x) sum(p2$lod>x))
-p3cnt=sapply(seq(2,8,.05), function(x) sum(p3$lod>x))
-p4cnt=sapply(seq(2,8,.05), function(x) sum(p4$lod>x))
-p5cnt=sapply(seq(2,8,.05), function(x) sum(p5$lod>x))
-iecnt=apply(cbind(p1cnt,p2cnt,p3cnt, p4cnt, p5cnt),1 ,mean)
+permcnt.marginal/obscnt$marginal.scan.peaks
+#5.35 5% 
+#4.9  10%
 
-# expected/observed
-# false positives/ (false positives + true positives)
-iecnt/obscnt
-# threshold 7.1 = 10% FDR 
+full2d.table=obs2D$full.scan.peaks[obs2D$full.scan.peaks$lod>7.15,]
+write.table(full2d.table, file='/data/eQTL/RData/full2D_table.txt', sep='\t', quote=F, row.names=F)
 
-full2d.table=o[o$lod>7.15,]
-write.table(full2d.table, file='/data/eQTL/RData/stranded/full2D_table.txt', sep='\t', quote=F, row.names=F)
+marginal2d.table=obs2D$marginal.scan.peaks[obs2D$marginal.scan.peaks$lod>4.9,]
+write.table(marginal2d.table, file='/data/eQTL/RData/marginal2D_table.txt', sep='\t', quote=F, row.names=F)
 
 
-m2d1=o$m1[o$lod>7.15]
-m2d2=o$m2[o$lod>7.15]
-m2d1.ind=match(m2d1,colnames(gdata))
-m2d2.ind=match(m2d2,colnames(gdata))
 
-mobs2D=readRDS('/data/eQTL/RData/stranded/2D/mpeaks2D.real.RData')
-mperm1.2D=readRDS('/data/eQTL/RData/stranded/2D/mpeaks2D.perm.1.RData')
-mperm2.2D=readRDS('/data/eQTL/RData/stranded/2D/mpeaks2D.perm.2.RData')
-mperm3.2D=readRDS('/data/eQTL/RData/stranded/2D/mpeaks2D.perm.3.RData')
-mperm4.2D=readRDS('/data/eQTL/RData/stranded/2D/mpeaks2D.perm.4.RData')
-mperm5.2D=readRDS('/data/eQTL/RData/stranded/2D/mpeaks2D.perm.5.RData')
+# HOTSPOT ANALYSIS --------------------------------------------------------------------------------------------------
+gbatch.fact.OD=covariates.OD
+#data.frame(gbatch.fact, OD.cov)
+dir.create('/data/eQTL/RData/hotspots/')
+#add directory as an argument to this function
+hotspots.OD=findHotspots.iteration1(t.tpm.matrix, gene.annot.df, 
+                                 peaks.per.chr, genetic.map, gdata, gdata.s.by.chr, gbatch.fact.OD) 
+#hotspots=findHotspots.iteration1(t.tpm.matrix, gene.annot.df, 
+#                                 peaks.per.chr, genetic.map, gdata, gdata.s.by.chr, gbatch.fact) 
+##save(hotspots, file='/data/eQTL/RData/hotspots_042616.RData')
+save(hotspots.OD, file='/data/eQTL/RData/hotspots.RData')
 
-mo=collapse2D(mobs2D)
-mp1=collapse2D(mperm1.2D); mp2=collapse2D(mperm2.2D); mp3=collapse2D(mperm3.2D); mp4=collapse2D(mperm4.2D); mp5=collapse2D(mperm5.2D)
+#load('/data/eQTL/RData/hotspots_062116.RData')
+hp.index=sort(match(unlist(do.call('rbind', lapply(hotspots.OD, function(x) do.call('rbind', x)))[,3]), colnames(gdata)))
 
-mobscnt=sapply(seq(2,8,.05), function(x) sum(mo$lod>x))
-names(mobscnt)=seq(2,8,.05)
-
-mp1cnt=sapply(seq(2,8,.05), function(x) sum(mp1$lod>x))
-mp2cnt=sapply(seq(2,8,.05), function(x) sum(mp2$lod>x))
-mp3cnt=sapply(seq(2,8,.05), function(x) sum(mp3$lod>x))
-mp4cnt=sapply(seq(2,8,.05), function(x) sum(mp4$lod>x))
-mp5cnt=sapply(seq(2,8,.05), function(x) sum(mp5$lod>x))
-miecnt=apply(cbind(mp1cnt,mp2cnt,mp3cnt, mp4cnt, mp5cnt),1 ,mean)
-
-miecnt/mobscnt
-
-marginal2d.table=mo[mo$lod>4.75,]
-write.table(marginal2d.table, file='/data/eQTL/RData/stranded/marginal2D_table.txt', sep='\t', quote=F, row.names=F)
+hotspot.boots=list()
+for( i in 1:77) {    
+    print(i)
+    hotspot.boots[[i]]=bootstrap.Hotspots(i)  
+}
+#--------------------------------------------------------------------------------------------------------------------
 
 
-mm2d1=mo$m1[mo$lod>4.65]
-mm2d2=mo$m2[mo$lod>4.65]
+
+
+
+#------------------------------------------Visualizing 2D interaction scan results ------------------------------------------------------
+mm2d1=marginal2d.table$m1[marginal2d.table$lod>4.9]
+mm2d2=marginal2d.table$m2[marginal2d.table$lod>4.9]
 mm2d1.ind=marker.GR$gcoord[match(mm2d1,colnames(gdata))]
 mm2d2.ind=marker.GR$gcoord[match(mm2d2,colnames(gdata))]
 
@@ -553,7 +539,6 @@ abline(0,1)
 #abline(v=marker.GR$gcoord[hp.index], col='blue', lty=2)
 #abline(h=marker.GR$gcoord[hp.index], col='blue', lty=2)
 
-
 plot(mm2d1.ind, mm2d2.ind, col='#00ff0022', pch=19 , cex=2)
 points(mm2d1.ind, mm2d2.ind, col='#0000ff22', pch=19, cex=2)
 
@@ -563,13 +548,13 @@ abline(v=gcoord.key, lty=1, col='black')
 
 abline(v=hp.index, lty=2, col='blue')
 abline(h=hp.index, lty=2, col='blue')
+# ---------------------------------------------------------------------------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 apdgc=split(all.peaks.DS, all.peaks.DS$chr)
 app=lapply(apdgc, function(x) split(x, x$gene))
 
 #Test this ... fast 2D scan for epistasis chromsome by chromosome
-for(pp in 3:5) {
+for(pp in 1:5) {
     VC_2Dp=list()
     for(cc1 in 1:16) {
             for(cc2 in cc1:16) {
@@ -594,18 +579,10 @@ plot(v4[,1], v4[,2], type='n', ylim=c(1,16), xlim=c(1,16))
 text(as.numeric(v4[,1]), as.numeric(v4[,2]),v4[,3], cex=log10(v4[,3]/10))
 
 
-gbatch.fact.OD=covariates.OD
-#data.frame(gbatch.fact, OD.cov)
-# HOTSPOT ANALYSIS --------------------------------------------------------------------------------------------------
-hotspots.OD=findHotspots.iteration1(t.tpm.matrix, gene.annot.df, 
-                                 peaks.per.chr, genetic.map, gdata, gdata.s.by.chr, gbatch.fact.OD) 
-#hotspots=findHotspots.iteration1(t.tpm.matrix, gene.annot.df, 
-#                                 peaks.per.chr, genetic.map, gdata, gdata.s.by.chr, gbatch.fact) 
-##save(hotspots, file='/data/eQTL/RData/hotspots_042616.RData')
-save(hotspots.OD, file='/data/eQTL/RData/stranded/hotspots_080816.RData')
 
-#load('/data/eQTL/RData/hotspots_062116.RData')
-hp.index=sort(match(unlist(do.call('rbind', lapply(hotspots.OD, function(x) do.call('rbind', x)))[,3]), colnames(gdata)))
+
+
+
 
 # divide the genome until 1500 bins 
 bins=seq(1,1.2e7,7500)
@@ -628,7 +605,7 @@ abline(v=marker.GR[hp.index]$gcoord, col='red')
 #load('/data/eQTL/RData/hotspots_042616.RData')
 #Iteration 2 
 #hotspots.refined=findHotspots.iteration2(hotspots.OD, t.tpm.matrix, gene.annot.df, 
-                                         peaks.per.chr, genetic.map, gdata, gdata.s.by.chr, gbatch.fact.OD ,do.save=T) 
+#                                         peaks.per.chr, genetic.map, gdata, gdata.s.by.chr, gbatch.fact.OD ,do.save=T) 
 #save(hotspots.refined, file='/data/eQTL/RData/hotspots_refined_060116.RData')
 #load('/data/eQTL/RData/hotspots_refined_060116.RData')
 #save(hotspots.refined, file='/data/eQTL/RData/hotspots_refined_042616.RData')
@@ -649,11 +626,6 @@ text(match(po, colnames(gdata.by.chr[[cc]])), 0,
  #          1:length(pr), col='red')
 
 
-hotspot.boots=list()
-for( i in 1:77) {    
-    print(i)
-    hotspot.boots[[i]]=bootstrap.Hotspots(i)  
-}
 # on Juno
 #hotspot.boots=list()
 #for( i in 43:1) {    #85:1 # 64:1 43:1

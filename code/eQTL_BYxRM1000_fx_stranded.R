@@ -1033,7 +1033,7 @@ findHotspots.iteration1=function(t.tpm.matrix, gene.annot.df, peaks.per.chr, gen
             attr(sub.t, 'r.boundary.index')=r.boundary.index
             if(do.save) {
                  #save(sub.t, file=paste0('/media/juno/bootstrap_hotspot/', total.hotspot.n, '.RData' ))
-                 save(sub.t, file=paste0('/data/eQTL/RData/stranded/hotspots/', total.hotspot.n, '.RData' ))
+                 save(sub.t, file=paste0('/data/eQTL/RData/hotspots/', total.hotspot.n, '.RData' ))
             }
       }
     }
@@ -1120,8 +1120,8 @@ bootstrap.Hotspots=function(hotspot.number.in ,onjuno=FALSE) {
     #load('~/bootstrap_hotspot/gdata.s.by.chr.RData')
     #load('/media/juno/bootstrap_hotspot/gdata.s.by.chr.RData')
     if(!onjuno) {
-        dir.create(paste0('/data/eQTL/RData/stranded/hotspots/',hotspot.number.in))
-        load(paste0('/data/eQTL/RData/stranded/hotspots/', hotspot.number.in,'.RData'))
+        dir.create(paste0('/data/eQTL/RData/hotspots/',hotspot.number.in))
+        load(paste0('/data/eQTL/RData/hotspots/', hotspot.number.in,'.RData'))
     } else{
         dir.create(paste0('/home/jbloom/bootstrap_hotspot/output/',hotspot.number.in))
         load(paste0('/home/jbloom/bootstrap_hotspot/input/', hotspot.number.in,'.RData'))
@@ -1160,15 +1160,16 @@ bootstrap.Hotspots=function(hotspot.number.in ,onjuno=FALSE) {
                sss[i]=X2
         } 
     peak=colnames(gdata.s.by.chr[[cc]])[which.max(sss)]
-    if(!onjuno) {
-        save(peak, file=paste0('/data/eQTL/RData/stranded/hotspots/',hotspot.number.in, '/', bootstrap.iteration))
-    }
-    else {
-        save(peak, file=paste0('/home/jbloom/bootstrap_hotspot/output/',hotspot.number.in, '/', bootstrap.iteration))
-    }
+    #if(!onjuno) {
+    #    save(peak, file=paste0('/data/eQTL/RData/hotspots/',hotspot.number.in, '/', bootstrap.iteration))
+    #}
+    #else {
+    #    save(peak, file=paste0('/home/jbloom/bootstrap_hotspot/output/',hotspot.number.in, '/', bootstrap.iteration))
+    #}
     peaks[bootstrap.iteration]=peak
     }
     close(pb)
+    save(peaks, file=paste0('/data/eQTL/RData/hotspots/',hotspot.number.in, '.bootstrap.peaks'))
     return(peaks)
 }
 ######## end  code for hotspot analysis --------------------------------------------------------------------------------------
@@ -1354,11 +1355,15 @@ collapse2D=function(obs2D) {
 
 
 #new function to aggregate 2D peaks without saving the raw matrix of all 2D lod scores (2D peak detection on the fly)
-do2locusScan.reduced_output=function(pheno.scaled, gdata.downsampled, out.dir, all.peaks.DS, marker.gap=20){
+do2locusScan.reduced_output=function(pheno.scaled, gdata.downsampled, all.peaks.DS, marker.gap=20){
     n.pheno=nrow(pheno.scaled) 
     
     full.scan.peaks=list()
     marginal.scan.peaks=list()
+
+    # could parallelize this
+    #cc=which(lower.tri(matrix(1, 16, 16), diag=T), arr.ind=T)
+    #cc.table=cbind(cc[,2], cc[,1])
 
     for(cc1 in 1:16) {
         for(cc2 in cc1:16) {
