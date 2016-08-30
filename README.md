@@ -1,13 +1,8 @@
-###eQTL on 1000 BYxRM haploid yeast segregants
-#####Joshua S Bloom and Frank W Albert
-___
-Analysis scripts and additional data
-
+###1000 BYxRM haploid yeast segregant eQTL analysis scripts and additional data
 see [Main Analysis](code/eQTL_BYxRM1000_stranded.R) for main analysis
 ___
 
-####additional data can be found by going to the following google drive links:
-
+######additional data can be at the following links:
 
 [RData/](https://drive.google.com/folderview?id=0ByJ-NQ1MGtWIUk9KRV9xNHJ6U1k) *R intermediate data structures*
 
