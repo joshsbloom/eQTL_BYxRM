@@ -5,10 +5,10 @@ ___
 ######additional data can be at the following links:
 
 [RData/](https://drive.google.com/folderview?id=0ByJ-NQ1MGtWIUk9KRV9xNHJ6U1k) *R intermediate data structures*
-
-[fastq/](https://drive.google.com/folderview?id=0ByJ-NQ1MGtWIOW9MNVdNWHppQjA) *raw fastq files from RNA-seq*
-
-[fastq_trimmed/](https://drive.google.com/open?id=0ByJ-NQ1MGtWIOXhQcVRwOUx4SE0) *untrimmed fastq files from RNA-seq*
+<!---
+[fastq/](https://drive.google.com/folderview?id=0ByJ-NQ1MGtWIOW9MNVdNWHppQjA) *fastq files from RNA-seq*
+-->
+[fastq_trimmed/](https://drive.google.com/open?id=0ByJ-NQ1MGtWIOXhQcVRwOUx4SE0) *trimmed fastq files from RNA-seq*
 
 [genotypes/](https://drive.google.com/open?id=0ByJ-NQ1MGtWIaHRzUWZ6Z1VzZWM) *RData structures containing genotype information*
 
