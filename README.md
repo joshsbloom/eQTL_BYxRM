@@ -4,8 +4,9 @@
 ___
 Analysis scripts and additional data
 
-see (code/eQTL_BYxRM1000_stranded.R) for main analysis
+see (/code/eQTL_BYxRM1000_stranded.R) for main analysis
 
 additional data can be found by going to the following google drive links:
 
 [RData/](https://drive.google.com/folderview?id=0ByJ-NQ1MGtWIUk9KRV9xNHJ6U1k)
+
