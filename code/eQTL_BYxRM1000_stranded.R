@@ -400,7 +400,8 @@ peaks.per.chr=split(all.peaks.OD, all.peaks.OD$chr)
 # would simplify things if we precompute chromosome QTL and blup residuals
 # then add back code to relocalize hotspots
 # load this in workspace for hotspot bootstraps 
-load('/data/eQTL/RData/gdata.RData')
+#load('/data/eQTL/RData/gdata.RData')
+#gdata.scaled=scale(gdata)
 cvec=(do.call('rbind', strsplit(colnames(gdata), ':'))[,1])
 chromosomes=paste0('chr', as.roman(1:16))
 gdata.s.by.chr=list()
@@ -498,12 +499,198 @@ save(hotspots.OD, file='/data/eQTL/RData/hotspots.RData')
 hp.index=sort(match(unlist(do.call('rbind', lapply(hotspots.OD, function(x) do.call('rbind', x)))[,3]), colnames(gdata)))
 
 hotspot.boots=list()
-for( i in 1:77) {    
+for( i in 1:86) { #length(hp.index)) {    
     print(i)
     hotspot.boots[[i]]=bootstrap.Hotspots(i)  
 }
+
+# aggregate information from hotspot analysis 
+
+hotspot.boot.peaks=list()
+hotspot.boot.intervals=matrix(NA, 86,5)
+for(nn in c(1:86)) {
+    # will load 'peaks'
+    load(paste0('/data/eQTL/RData/hotspots/', nn, '.bootstrap.peaks'))
+    r=gsub(':', '_', peaks)
+    pos=as.numeric(sapply(strsplit(r, '_'), function(x)x[2]))
+    hotspot.boot.peaks[[nn]]=pos
+    hotspot.boot.intervals[nn,]=c(quantile(pos, .025), quantile(pos, .05),  quantile(pos, .5),  quantile(pos, .95),quantile(pos, .975))
+}
+
+# how hot to be a hotspot?
+bins=seq(1,1.2e7,7500)
+hp.null=cut(all.peaks.OD$marker.gcoord, bins)
+lambda.pois=length(hp.null)/length(bins)
+qpois(.05/length(bins), lambda.pois, lower.tail=F)
+
+write.table(
+            data.frame(cbind(as.character(do.call('rbind', 
+                               lapply(hotspots.OD, function(x) do.call('rbind',x)))[,3]),hotspot.boot.intervals)),
+            file='/data/eQTL/RData/hotspots_081016.txt', sep='\t' ,quote=F, row.names=FALSE)
+
+hotspot.positions=as.character(do.call('rbind', lapply(hotspots.OD, function(x) do.call('rbind',x)))[,3])
+hotspot.list=list(hotspot.positions=hotspot.positions,
+                  hotspot.boot.peaks=hotspot.boot.peaks,
+                  hotspot.boot.intervals=hotspot.boot.intervals)
+save(hotspot.list, file='/data/eQTL/RData/hotspot_with_boots_list.RData')
+
+save.image('/data/eQTL/RData/090116.RData')
+
+#load('/home/jbloom/Dropbox/Public/eQTL/hotspot_with_boots_list_062316.RData')
 #--------------------------------------------------------------------------------------------------------------------
 
+
+#here's a logical vector. TRUE => remove cis effects, FALSE => do not 
+#remove cis effect
+
+#there are 1694 FALSE, i.e. "protected" cis effects. This is a lot 
+#because they include all genes that 1) physically overlap with a 95% 
+#hotspot interval, and 2) that have a cis eQTL that itself overlaps with 
+#a hotspot, even if the gene itself is outside of the hotspot. Thought 
+#for the latter group is that these might be genes right next to a 
+#hotspot where localization uncertainty might lead us astray. "cis" peak 
+#is defined using padded genes (-1000, +200) and extended perfect LD eQTL 
+#markers.
+
+#So this is very generous in terms of how many genes it protects. Should 
+#ensure that any cis-mediated hotspots do not get corrected away. Clearly 
+#there are choices here, but let's run with this for now. We have the 
+#fully cis-corrected version in the bag after all.
+
+load('/data/eQTL/RData/R_removeCis_withPaddedCisGeneDefinitions_160901.RData')
+# removeCIS yes = remove_cis
+
+# regress out local effect
+bc.resid=matrix(NA, 1012, ncol(t.tpm.matrix))
+for(i in 1:ncol(t.tpm.matrix)) {
+    print(i)
+    if(removeCis[i]) {
+        bc.resid[,i]=residuals(lm(t.tpm.matrix[,i]~covariates.OD+gdata[,closest.marker.to.transcript[i]]))
+    }else{
+        bc.resid[,i]=residuals(lm(t.tpm.matrix[,i]~covariates.OD))
+    }
+}
+bc.resid=scale(bc.resid)
+colnames(bc.resid)=colnames(t.tpm.matrix)[1:ncol(t.tpm.matrix)]
+
+#ols.hotspot
+ols.hotspots=list()
+for(i in 1:ncol(bc.resid)) {
+    print(i)
+    ols.hotspots[[colnames(bc.resid)[i]]]=
+                coef(lm(scale(t.tpm.matrix[,i])~covariates.OD+gdata[,closest.marker.to.transcript[i]]+gdata[,hp.index]-1))
+                                               #tcv.EBglmnet(gdata.scaled[,as.character(htabler$peak)], bc.resid[,i])
+}
+ols.matrix=do.call('rbind', ols.hotspots)
+save(ols.matrix, file='/data/eQTL/RData/ols.matrix.hotspots.RData')
+
+
+lasso.hotspots=list()
+for(i in 1:ncol(bc.resid)) {
+    print(i)
+    lasso.hotspots[[colnames(bc.resid)[i]]]=cv.EBglmnet(gdata.scaled[,hp.index], bc.resid[,i])
+}
+
+lasso.matrix=matrix(0, length(hp.index), ncol(bc.resid) ) 
+rownames(lasso.matrix)=as.character(colnames(gdata)[hp.index]) #htabler$peak) #colnames(gdata)[as.character(htabler$peak)]
+colnames(lasso.matrix)=colnames(bc.resid)
+
+for(i in 1:ncol(bc.resid)) {
+    print(i)
+    lh=lasso.hotspots[[colnames(bc.resid)[i]]]
+    lasso.matrix[lh$fit[,1],i]=lh$fit[,3]
+}
+save(lasso.matrix, file='/data/eQTL/RData/lasso.matrix.hotspots.selectiveCisRemoval.RData')
+
+#save(lasso.matrix, file='/data/eQTL/RData/lasso.matrix.hotspots.0630116.RData')
+#save(lasso.matrix, file='/data/eQTL/RData/lasso.matrix.hotspots.072216.selectiveCisRemoval.RData')
+#save(lasso.matrix, file='/home/jbloom/Dropbox/Public/eQTL/lasso.matrix.hotspots.072216.selectiveCisRemoval.RData')
+
+
+
+htabler=do.call('rbind', lapply(hotspots.OD, function(x) do.call('rbind', x)))
+#htabler=do.call('rbind', lapply(hotspots.refined, function(x) do.call('rbind', x)))
+
+abline(v=marker.GR$gcoord[match(htable$peak, marker.GR$mname)])
+abline(v=marker.GR$gcoord[match(htabler$peak, marker.GR$mname)])
+
+abline(v=match(sapply(hotspots[[cc]], function(x) x[,'peak']), colnames(gdata)))
+
+#save(hotspots, file='/data/eQTL/RData/hotspots_031016.RData')
+
+
+covariates=model.matrix(t.tpm.matrix[,1]~gbatch.fact)
+#naive local model
+cisModel=rep(NA, 6288)
+for(i in 1:6288) {
+    print(i)
+    cisModel[i]=anova(lm(t.tpm.matrix[,i]~covariates)
+                      ,lm(t.tpm.matrix[,i]~covariates+gdata[,closest.marker.to.transcript[i]]) )$'Pr(>F)'[2]
+}
+cisModel.effects=
+rep(NA, 6288)
+for(i in 1:6288) {
+    print(i)
+    cisModel.effects[i]=
+    as.numeric(coefficients(lm(scale(t.tpm.matrix[,i])~covariates+gdata[,closest.marker.to.transcript[i]]-1) ))[14]
+}
+
+which(as.character(seqnames(marker.GR)) %in% unique.chrs[1])
+
+eQTL_bigPlot(all.peaks, gcoord.key, marker.GR, which(as.character(seqnames(marker.GR)) %in% unique.chrs[1]))
+x11()
+par(xaxs='i')
+plot(gene.GR$gcoord[1:6288], smooth(abs(cisModel.effects),twiceit=T))
+
+
+
+
+
+
+
+
+load('/data/rr/Phenotyping/NORMpheno.RData')
+
+BYxRM_plate.phenos=lapply(NORMpheno, function(x) {x[grep('^A', names(x))] })
+plate.pheno.avg=sapply(BYxRM_plate.phenos, function(x) sapply(x, mean, na.rm=T) )
+eQTL.seg.names=sapply(strsplit(rownames(t.tpm.matrix), '-'), function(x) x[1]) 
+
+plate.oset=which((rownames(plate.pheno.avg) %in% eQTL.seg.names))
+eQTL.oset=which(  eQTL.seg.names %in% rownames(plate.pheno.avg) )
+
+ppa=plate.pheno.avg[plate.oset,]
+eoa=t.tpm.matrix[eQTL.oset,]
+goa=gdata[eQTL.oset,]
+#copper
+c1=cor(ppa[,7], eoa)
+plot(c1^2)
+plot(c1[1,]^2)
+identify(1:5720, c1[1,]^2, colnames(eoa))
+
+rge=scale(residuals(lm(eoa~covariates.OD[eQTL.oset,])))
+#manganese
+cg=cor(ppa[,25],goa)
+c1=cor(ppa[,25], residuals(lm(eoa~covariates.OD[eQTL.oset,])))
+par(mfrow=c(2,1))
+plot(marker.GR$gcoord, cg[1,]^2, ylab='r^2')
+plot(gene.GR$gcoord, c1[1,]^2, ylab='r^2')
+identify(gene.GR$gcoord, c1[1,]^2, colnames(eoa))
+
+A.subset=tcrossprod(gdata[eQTL.oset,])/ncol(gdata)
+rgeA=tcrossprod(rge)/ncol(rge)
+
+colnames(ppa)
+
+regress(ppa[,1]~1, ~A.subset, verbose=T)
+
+# contrast 31 tunicamycin vs 12 fluconazole
+r1=regress(ppa[,12]~1, ~A.subset, verbose=T, pos=c(T,T,T))
+r2=regress(ppa[,12]~1, ~A.subset+rgeA, verbose=T, pos=c(T,T,T))
+r3=regress(ppa[,12]~1, ~rgeA, verbose=T, pos=c(T,T,T))
+
+r1$sigma/sum(r1$sigma)
+r2$sigma/sum(r2$sigma)
+r3$sigma/sum(r3$sigma)
 
 
 
@@ -637,32 +824,6 @@ text(match(po, colnames(gdata.by.chr[[cc]])), 0,
 #   chrI   chrII  chrIII   chrIV    chrV   chrVI  chrVII chrVIII   chrIX    chrX   chrXI  chrXII chrXIII  chrXIV   chrXV  chrXVI 
 # 202825  798782  302979 1521369  563829  266145 1068261  519219  424866  724256  643662 1058607  914575  765330 1067520  928107
 
-hotspot.boot.peaks=list()
-hotspot.boot.intervals=matrix(NA, 77,5)
-for(nn in c(1:77)) {
-    setwd(paste0('/data/eQTL/RData/stranded/hotspots/', nn))
-    f=list.files('.')
-    r=c()
-    for(n in f) {load(n); r=c(r, peak) }
-    str(r)
-    r=gsub(':', '_', r)
-    pos=as.numeric(sapply(strsplit(r, '_'), function(x)x[2]))
-    hotspot.boot.peaks[[nn]]=pos
-    hotspot.boot.intervals[nn,]=c(quantile(pos, .025), quantile(pos, .05),  quantile(pos, .5),  quantile(pos, .95),quantile(pos, .975))
-}
-
-write.table(
-            data.frame(cbind(as.character(do.call('rbind', 
-                               lapply(hotspots.OD, function(x) do.call('rbind',x)))[,3]),hotspot.boot.intervals)),
-            file='/data/eQTL/RData/stranded/hotspots_081016.txt', sep='\t' ,quote=F, row.names=FALSE)
-
-hotspot.positions=as.character(do.call('rbind', lapply(hotspots.OD, function(x) do.call('rbind',x)))[,3])
-hotspot.list=list(hotspot.positions=hotspot.positions,
-                  hotspot.boot.peaks=hotspot.boot.peaks,
-                  hotspot.boot.intervals=hotspot.boot.intervals)
-save(hotspot.list, file='/data/eQTL/RData/stranded/hotspot_with_boots_list_081016.RData')
-
-#load('/home/jbloom/Dropbox/Public/eQTL/hotspot_with_boots_list_062316.RData')
 
 phname=cbind(as.character(do.call('rbind', 
                                lapply(hotspots.refined, function(x) do.call('rbind',x)))[,3]))
@@ -765,107 +926,7 @@ all.peaks.multiple.regression=do.call('rbind', peaks.per.gene)
 # lm.coeff = Betas for each term in multiple regression model
 save(all.peaks.multiple.regression, file='/home/jbloom/Dropbox/Public/eQTL/all.peaks.multiple.regression.RData')
 
-#here's a logical vector. TRUE => remove cis effects, FALSE => do not 
-#remove cis effect
 
-#there are 1694 FALSE, i.e. "protected" cis effects. This is a lot 
-#because they include all genes that 1) physically overlap with a 95% 
-#hotspot interval, and 2) that have a cis eQTL that itself overlaps with 
-#a hotspot, even if the gene itself is outside of the hotspot. Thought 
-#for the latter group is that these might be genes right next to a 
-#hotspot where localization uncertainty might lead us astray. "cis" peak 
-#is defined using padded genes (-1000, +200) and extended perfect LD eQTL 
-#markers.
-
-#So this is very generous in terms of how many genes it protects. Should 
-#ensure that any cis-mediated hotspots do not get corrected away. Clearly 
-#there are choices here, but let's run with this for now. We have the 
-#fully cis-corrected version in the bag after all.
-
-load('/data/eQTL/RData/stranded/R_removeCis_withPaddedCisGeneDefinitions_160812.RData')
-# removeCIS yes = remove_cis
-
-# regress out local effect
-bc.resid=matrix(NA, 1012, ncol(t.tpm.matrix))
-for(i in 1:ncol(t.tpm.matrix)) {
-    print(i)
-    if(removeCis[i]) {
-        bc.resid[,i]=residuals(lm(t.tpm.matrix[,i]~covariates.OD+gdata[,closest.marker.to.transcript[i]]))
-    }else{
-        bc.resid[,i]=residuals(lm(t.tpm.matrix[,i]~covariates.OD))
-    }
-}
-bc.resid=scale(bc.resid)
-colnames(bc.resid)=colnames(t.tpm.matrix)[1:ncol(t.tpm.matrix)]
-
-#ols.hotspot
-ols.hotspots=list()
-for(i in 1:ncol(bc.resid)) {
-    print(i)
-    ols.hotspots[[colnames(bc.resid)[i]]]=
-                coef(lm(scale(t.tpm.matrix[,i])~covariates.OD+gdata[,closest.marker.to.transcript[i]]+gdata[,hp.index]-1))
-                                               #tcv.EBglmnet(gdata.scaled[,as.character(htabler$peak)], bc.resid[,i])
-}
-ols.matrix=do.call('rbind', ols.hotspots)
-save(ols.matrix, file='/data/eQTL/RData/stranded/ols.matrix.hotspots.081216.RData')
-
-
-lasso.hotspots=list()
-for(i in 1:ncol(bc.resid)) {
-    print(i)
-    lasso.hotspots[[colnames(bc.resid)[i]]]=cv.EBglmnet(gdata.scaled[,hp.index], bc.resid[,i])
-}
-
-lasso.matrix=matrix(0, length(hp.index), ncol(bc.resid) ) 
-rownames(lasso.matrix)=as.character(colnames(gdata)[hp.index]) #htabler$peak) #colnames(gdata)[as.character(htabler$peak)]
-colnames(lasso.matrix)=colnames(bc.resid)
-
-for(i in 1:ncol(bc.resid)) {
-    print(i)
-    lh=lasso.hotspots[[colnames(bc.resid)[i]]]
-    lasso.matrix[lh$fit[,1],i]=lh$fit[,3]
-}
-save(lasso.matrix, file='/data/eQTL/RData/stranded/lasso.matrix.hotspots.081216.selectiveCisRemoval.RData')
-
-#save(lasso.matrix, file='/data/eQTL/RData/lasso.matrix.hotspots.0630116.RData')
-#save(lasso.matrix, file='/data/eQTL/RData/lasso.matrix.hotspots.072216.selectiveCisRemoval.RData')
-#save(lasso.matrix, file='/home/jbloom/Dropbox/Public/eQTL/lasso.matrix.hotspots.072216.selectiveCisRemoval.RData')
-
-
-
-htabler=do.call('rbind', lapply(hotspots.OD, function(x) do.call('rbind', x)))
-#htabler=do.call('rbind', lapply(hotspots.refined, function(x) do.call('rbind', x)))
-
-abline(v=marker.GR$gcoord[match(htable$peak, marker.GR$mname)])
-abline(v=marker.GR$gcoord[match(htabler$peak, marker.GR$mname)])
-
-abline(v=match(sapply(hotspots[[cc]], function(x) x[,'peak']), colnames(gdata)))
-
-#save(hotspots, file='/data/eQTL/RData/hotspots_031016.RData')
-
-
-covariates=model.matrix(t.tpm.matrix[,1]~gbatch.fact)
-#naive local model
-cisModel=rep(NA, 6288)
-for(i in 1:6288) {
-    print(i)
-    cisModel[i]=anova(lm(t.tpm.matrix[,i]~covariates)
-                      ,lm(t.tpm.matrix[,i]~covariates+gdata[,closest.marker.to.transcript[i]]) )$'Pr(>F)'[2]
-}
-cisModel.effects=
-rep(NA, 6288)
-for(i in 1:6288) {
-    print(i)
-    cisModel.effects[i]=
-    as.numeric(coefficients(lm(scale(t.tpm.matrix[,i])~covariates+gdata[,closest.marker.to.transcript[i]]-1) ))[14]
-}
-
-which(as.character(seqnames(marker.GR)) %in% unique.chrs[1])
-
-eQTL_bigPlot(all.peaks, gcoord.key, marker.GR, which(as.character(seqnames(marker.GR)) %in% unique.chrs[1]))
-x11()
-par(xaxs='i')
-plot(gene.GR$gcoord[1:6288], smooth(abs(cisModel.effects),twiceit=T))
 
 
 
