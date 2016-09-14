@@ -117,8 +117,6 @@ count.matrix=count.matrix[,-low.count.samples]
 sample.sum = sample.sum[-low.count.samples]
 #--------------------------------------------------------------------------------------------------------------------------
 
-
-
 # Match genotypes and phenotypes as early as possible ---------------------------------------------------------------------
 match_pheno_and_geno=function(pheno_input_matrix, geno_matrix) {
     BYxRM_strain_name=rownames(geno_matrix) #do.call('rbind',strsplit(rownames(geno_matrix), ':'))[,1]
@@ -221,7 +219,6 @@ downsample.tpm.matrices=lapply(downsample.count.matrices, function(x) x[-invaria
 #save(t.tpm.matrix, file='/data/eQTL/RData/log2_t.tpm.matrix.RData')
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-
 # To estimate H^2 and find parental differences ------------------------------------------------------------------------------------
        # parental values
        dir.in.p=paste0(base.dir, 'kallisto_out_merged_parents_stranded_boot/')
@@ -286,6 +283,9 @@ gene.GR$gcoord=as.vector(gcoord.key[as.character(seqnames(gene.GR))] + start(gen
 marker.GR$gcoord=as.vector(gcoord.key[as.character(seqnames(marker.GR))] + start(marker.GR) )
 marker.GR$mname=colnames(gdata)
 
+save(marker.GR, file='/data/eQTL/RData/markerAnnotation.RData')
+save(gene.GR, file='/data/eQTL/RData/geneAnnotation.RData')
+
 #residual.pheno.OD=residuals(lm(t.tpm.matrix~gbatch.fact+OD.cov) )
 #pheno.scaled.OD=(scale(residual.pheno.OD))
 
@@ -305,10 +305,14 @@ A=tcrossprod(gdata.scaled)/ncol(gdata.scaled)
 #residual.pheno=residuals(lm(t.tpm.matrix~covariates) )
 #pheno.scaled=(scale(residual.pheno))
 
+#mODmod=cbind(1, model.matrix(t.tpm.matrix[,1]~gbatch.fact-1), OD.cov)
+#residual.pheno.OD2=residuals(lm(t.tpm.matrix~mODmod-1) )
+
 covariates.OD=model.matrix(t.tpm.matrix[,1]~gbatch.fact+OD.cov)
 residual.pheno.OD=residuals(lm(t.tpm.matrix~covariates.OD) )
 pheno.scaled.OD=(scale(residual.pheno.OD))
 scanoneLODS.OD=fasterLOD(nrow(pheno.scaled.OD),pheno.scaled.OD,gdata.scaled, betas=TRUE)
+save(covariates.OD, file='/data/eQTL/RData/covariates.OD.RData')
 #save(scanoneLODS.OD, file = '/data/eQTL/RData/scanoneLODS_OD_stranded.RData')
 
 #R> str(scanoneLODS)
@@ -335,7 +339,6 @@ for(i in 1:ncol(residual.pheno.OD)) {
     vcAA.OD[[colnames(residual.pheno.OD)[i]]]$sigma=r$sigma
     vcAA.OD[[colnames(residual.pheno.OD)[i]]]$se=sqrt(diag(r$sigma.cov))
 }
-
 
 # do CV ... create 5 random splits ... keep track of splits, find peaks in 4 of 5 sets and then estimate variance explained in the 5th set
 # refit full model (keep AOV info)
@@ -394,96 +397,9 @@ sum(qvalue(cisModel)$qvalue<.05) #4241
 #tpm.q=apply(scale(t.tpm.matrix),2, function(x)  x[(x>quantile(x,.995))]  ) 
 
 # remap QTL hotspots
-
+# HOTSPOT ANALYSIS --------------------------------------------------------------------------------------------------
 peaks.per.chr=split(all.peaks.OD, all.peaks.OD$chr)
 
-# would simplify things if we precompute chromosome QTL and blup residuals
-# then add back code to relocalize hotspots
-# load this in workspace for hotspot bootstraps 
-#load('/data/eQTL/RData/gdata.RData')
-#gdata.scaled=scale(gdata)
-cvec=(do.call('rbind', strsplit(colnames(gdata), ':'))[,1])
-chromosomes=paste0('chr', as.roman(1:16))
-gdata.s.by.chr=list()
-gdata.by.chr=list()
-for(cc in chromosomes) {   
-   gdata.s.by.chr[[cc]]=gdata.scaled[,which(cvec %in% cc)]   
-   gdata.by.chr[[cc]]=gdata[,which(cvec %in% cc)]  
-}
-
-genetic.map=buildGeneticMap(gdata.by.chr)
-genetic.map.c=as.vector(unlist(genetic.map))
-names(genetic.map.c)=as.vector(unlist(sapply(genetic.map, names)))
-
-# do 2 locus scan --------------begin by pruning marker data by LD  ---------------------------------------------------------------------------------------------------------
-gdata.downsampled=downsampleMarkers(gdata.by.chr, gdata.s.by.chr)
-
-#save(gdata, file='/data/eQTL/RData/gdata.RData')
-#load('/data/eQTL/RData/2D/gdata.RData')
-#save(gdata.downsampled, file='/data/eQTL/RData/gdata.downsampled.RData')
-
-# residualize trait (remove additive effects) (note that output here is not scaled)
-pheno.additive.removed=removeAdditiveEffects(t.tpm.matrix, peaks.per.gene, covariates.OD, gdata)
-#save(pheno.additive.removed, file='/data/eQTL/RData/pheno.additive.removed.RData')
-
-load('/data/eQTL/RData/2D/pheno.additive.removed.RData')
-
-pheno.additive.removed.scaled=scale(pheno.additive.removed)
-# sanity check that additive signal is gone
-#scanoneLODS.ar=fasterLOD(nrow(pheno.additive.removed.scaled),pheno.additive.removed.scaled,gdata.scaled, betas=TRUE)
-
-marker.GR.downsampled=marker.GR[match(as.vector(unlist(sapply(gdata.downsampled, colnames))), marker.GR$mname),]
-all.peaks.DS=all.peaks.OD
-all.peaks.DS$marker.ds.ind=findInterval(all.peaks.OD$marker.gcoord, marker.GR.downsampled$gcoord)
-all.peaks.DS$pmarker.ds=marker.GR.downsampled$mname[all.peaks.DS$marker.ds.ind]
-
-#save(all.peaks.DS, file='/data/eQTL/RData/all.peaks.DS.RData')
-load('/data/eQTL/RData/all.peaks.DS.RData')
-
-obs2D=lapply(do2locusScan.reduced_output(pheno.additive.removed.scaled, 
-                                         gdata.downsampled, all.peaks.DS, marker.gap=20), collapse2D)
-set.seed(1)
-perm2D=list()
-for(i in 1:5) {
-    perm2D[[as.character(i)]]=lapply(do2locusScan.reduced_output(pheno.additive.removed.scaled[sample(1:nrow(pheno.additive.removed.scaled)),], 
-                                                                 gdata.downsampled, all.peaks.DS, marker.gap=20), collapse2D)
-}
-saveRDS(obs2D , file= '/data/eQTL/RData/obs2D.peaks.RDS')
-saveRDS(perm2D, file='/data/eQTL/RData/perm2D.peaks.RDS')
-
-obscnt=lapply(obs2D, function(o){ 
-                  v=sapply(seq(2,8,.05), function(x) sum(o$lod>x)) 
-                  names(v)=seq(2,8,.05)
-                  return(v)    
-                      } )
-permcnt=lapply(perm2D, function(y){ 
-          lapply(y, function(o){ 
-                  v=sapply(seq(2,8,.05), function(x) sum(o$lod>x)) 
-                  names(v)=seq(2,8,.05)
-                  return(v)    
-                      } ) })
-
-
-permcnt.full=rowMeans(sapply(permcnt, function(x) x[[1]]))
-permcnt.marginal=rowMeans(sapply(permcnt, function(x) x[[2]]))
-
-permcnt.full/obscnt$full.scan.peaks
-# 7.5 5%
-# 7.15 10%
-
-permcnt.marginal/obscnt$marginal.scan.peaks
-#5.35 5% 
-#4.9  10%
-
-full2d.table=obs2D$full.scan.peaks[obs2D$full.scan.peaks$lod>7.15,]
-write.table(full2d.table, file='/data/eQTL/RData/full2D_table.txt', sep='\t', quote=F, row.names=F)
-
-marginal2d.table=obs2D$marginal.scan.peaks[obs2D$marginal.scan.peaks$lod>4.9,]
-write.table(marginal2d.table, file='/data/eQTL/RData/marginal2D_table.txt', sep='\t', quote=F, row.names=F)
-
-
-
-# HOTSPOT ANALYSIS --------------------------------------------------------------------------------------------------
 gbatch.fact.OD=covariates.OD
 #data.frame(gbatch.fact, OD.cov)
 dir.create('/data/eQTL/RData/hotspots/')
@@ -535,7 +451,6 @@ hotspot.list=list(hotspot.positions=hotspot.positions,
 save(hotspot.list, file='/data/eQTL/RData/hotspot_with_boots_list.RData')
 
 save.image('/data/eQTL/RData/090116.RData')
-
 #load('/home/jbloom/Dropbox/Public/eQTL/hotspot_with_boots_list_062316.RData')
 #--------------------------------------------------------------------------------------------------------------------
 
@@ -583,7 +498,7 @@ for(i in 1:ncol(bc.resid)) {
 }
 ols.matrix=do.call('rbind', ols.hotspots)
 save(ols.matrix, file='/data/eQTL/RData/ols.matrix.hotspots.RData')
-
+load('/data/eQTL/RData/ols.matrix.hotspots.RData')
 
 lasso.hotspots=list()
 for(i in 1:ncol(bc.resid)) {
@@ -601,39 +516,38 @@ for(i in 1:ncol(bc.resid)) {
     lasso.matrix[lh$fit[,1],i]=lh$fit[,3]
 }
 save(lasso.matrix, file='/data/eQTL/RData/lasso.matrix.hotspots.selectiveCisRemoval.RData')
+load('/data/eQTL/RData/lasso.matrix.hotspots.selectiveCisRemoval.RData')
 
 #save(lasso.matrix, file='/data/eQTL/RData/lasso.matrix.hotspots.0630116.RData')
 #save(lasso.matrix, file='/data/eQTL/RData/lasso.matrix.hotspots.072216.selectiveCisRemoval.RData')
 #save(lasso.matrix, file='/home/jbloom/Dropbox/Public/eQTL/lasso.matrix.hotspots.072216.selectiveCisRemoval.RData')
 
 
-
 htabler=do.call('rbind', lapply(hotspots.OD, function(x) do.call('rbind', x)))
 #htabler=do.call('rbind', lapply(hotspots.refined, function(x) do.call('rbind', x)))
 
-abline(v=marker.GR$gcoord[match(htable$peak, marker.GR$mname)])
-abline(v=marker.GR$gcoord[match(htabler$peak, marker.GR$mname)])
+#abline(v=marker.GR$gcoord[match(htable$peak, marker.GR$mname)])
+#abline(v=marker.GR$gcoord[match(htabler$peak, marker.GR$mname)])
+#abline(v=match(sapply(hotspots[[cc]], function(x) x[,'peak']), colnames(gdata)))
 
-abline(v=match(sapply(hotspots[[cc]], function(x) x[,'peak']), colnames(gdata)))
-
-#save(hotspots, file='/data/eQTL/RData/hotspots_031016.RData')
-
-
-covariates=model.matrix(t.tpm.matrix[,1]~gbatch.fact)
 #naive local model
-cisModel=rep(NA, 6288)
-for(i in 1:6288) {
+cisModel=rep(NA, 5718)
+for(i in 1:5718) {
     print(i)
-    cisModel[i]=anova(lm(t.tpm.matrix[,i]~covariates)
-                      ,lm(t.tpm.matrix[,i]~covariates+gdata[,closest.marker.to.transcript[i]]) )$'Pr(>F)'[2]
+    cisModel[i]=anova(lm(t.tpm.matrix[,i]~covariates.OD)
+                      ,lm(t.tpm.matrix[,i]~covariates.OD+gdata[,closest.marker.to.transcript[i]]) )$'Pr(>F)'[2]
 }
-cisModel.effects=
-rep(NA, 6288)
-for(i in 1:6288) {
+cisModel.effects=rep(NA, 5718)
+for(i in 1:5718) {
     print(i)
     cisModel.effects[i]=
-    as.numeric(coefficients(lm(scale(t.tpm.matrix[,i])~covariates+gdata[,closest.marker.to.transcript[i]]-1) ))[14]
+    as.numeric(coefficients(lm(scale(t.tpm.matrix[,i])~covariates.OD+gdata[,closest.marker.to.transcript[i]]-1) ))[15]
 }
+cme=(2^(cisModel.effects*2))
+cme[cme<1]=1+(1-cme[cme<1])
+hist(cme, xlim=c(1,4), breaks=100, xlab='(folded) fold difference between alleles', main='eQTL cis effect sizes',
+     sub=paste('median=1.109', '    IQR=.21') )
+save(cisModel.effects, file='~/Desktop/cisEffect.RData')
 
 which(as.character(seqnames(marker.GR)) %in% unique.chrs[1])
 
@@ -642,128 +556,240 @@ x11()
 par(xaxs='i')
 plot(gene.GR$gcoord[1:6288], smooth(abs(cisModel.effects),twiceit=T))
 
+vc_multiple_components=list()
+lm.2Dupdate=list()
+lm.3Dint2=list()
+#[3415:length(names(peaks.per.gene))]
 
 
+# test for 2D interactions at peak marker locations from 1D scan
+######################################################
+set.seed(1)
+yr=residuals(lm(t.tpm.matrix~covariates.OD))
+yr.perm=replicate(10, {yr[sample(1:1012),]})
+y.for.2D=abind(yr, yr.perm, along=3)
+#####################################################
+lm.2Dint = foreach(p = 1:11) %dopar% {    
+    print(p)
+    intlist=list()
+    pb =txtProgressBar(min = 1, max = length(peaks.per.gene), style = 3)
+    for(g in 1:length(peaks.per.gene)) { 
+        setTxtProgressBar(pb, g)
+        gg=names(peaks.per.gene)[g]
+        pms=peaks.per.gene[[g]]$pmarker[!duplicated(peaks.per.gene[[g]]$pmarker)]
+        if(length(pms)>1) {
+             X=data.frame(gdata[,pms])
+             fitme=lm(y.for.2D[,gg,p]~., data=X)
+             #lm.2Dint[[as.character(p)]][[gg]]=add1(fitme, ~.^2, test='F')
+             intlist[[gg]]=add1(fitme, ~.^2, test='F')
+        } 
+    }
+    close(pb)
+    return(intlist)
+}
 
 
+# FDR with q-value  ------------------------------------------
+ps.QTL.2D=na.omit(unlist(sapply(lm.2Dint[[1]], function(x) x$'Pr(>F)')))
+qs2D =qvalue(ps.QTL.2D)
+qthresh2d=max(qs2D$pvalues[qs2D$qvalues<.1]) 
+#R> qthresh2d
+#[1] 0.001285
+#---------------------------------------------------------------
+
+ps.QTL.2D.perm=sapply(2:11, function(y) na.omit(unlist(sapply(lm.2Dint[[y]], function(x) x$'Pr(>F)'))))
+
+obscnt.targetted=sapply(seq(1.5,8,.05) , function(x) sum( -log10(ps.QTL.2D) > x ) )
+names(obscnt.targetted)=seq(1.5,8,.05)
+permcnt.targetted=rowMeans(apply(ps.QTL.2D.perm, 2, function(y) { sapply(seq(1.5,8,.05) , function(x) sum( -log10(y) > x ) )     }))
+names(permcnt.targetted)= seq(1.5,8,.05)
+
+permcnt.targetted/obscnt.targetted
+#FDR 5%  = 0.0003548    10^(3.45)
+#FDR 10% = 0.001        10^(3)
+qthresh2d=.001
+sum(ps.QTL.2D<qthresh2d)
+
+library(regress)
+
+peaks.per.gene.augmented=list()
+vc_multiple_components=list()
+lm.2D=list()
+lm.3D.test=list()
 
 
+A=tcrossprod(gdata.scaled)/ncol(gdata.scaled)
+AA=A*A
+Ahot=tcrossprod(gdata.scaled[,sort(match(as.character(htabler[,'peak']), colnames(gdata)))])/nrow(htabler)
 
-load('/data/rr/Phenotyping/NORMpheno.RData')
+pb =txtProgressBar(min = 1, max = length(peaks.per.gene), style = 3)
+for(gg in 1:length(peaks.per.gene)) {
+    setTxtProgressBar(pb, g)
+    g=names(peaks.per.gene)[gg]
+    #in names(peaks.per.gene) ) {
+    print(g)
+    yr=pheno.scaled.OD[,g]
+    ppg=peaks.per.gene[[g]][!duplicated(peaks.per.gene[[g]]$pmarker),]
+    apeaks = match( ppg$pmarker, colnames(gdata))
 
-BYxRM_plate.phenos=lapply(NORMpheno, function(x) {x[grep('^A', names(x))] })
-plate.pheno.avg=sapply(BYxRM_plate.phenos, function(x) sapply(x, mean, na.rm=T) )
-eQTL.seg.names=sapply(strsplit(rownames(t.tpm.matrix), '-'), function(x) x[1]) 
+    pms=ppg$pmarker
+    max.peak=ppg$pmarker[which.max(ppg$LOD)]
+    qA=tcrossprod(gdata.scaled[,pms])/length(pms)
+    if(sum(ppg$cis)>0 & sum(!ppg$cis>0) ) {
+        A.local=tcrossprod(gdata.scaled[,pms[ppg$cis]])/sum(ppg$cis)
+        A.distant=tcrossprod(gdata.scaled[,pms[!ppg$cis]])/sum(!ppg$cis)
+        A.local_X_A=A.local*A
+        A.distant_X_A=A.distant*A
+        rr=regress(yr~1, ~A.local + A.distant + A + A.local_X_A + A.distant_X_A + AA, verbose=T, pos=c(T,T,T,T,T,T,T))
+        vc_multiple_components[[g]][['2']]=extract.rr(rr)
+    }    
+   
+    rr=regress(yr~1, ~qA+A+AA, verbose=T, pos=c(T,T,T,T,T))
+    vc_multiple_components[[g]][['3']]=extract.rr(rr)
+    X=data.frame(gdata[,pms])
+    fitme=lm(yr~.-1, data=X)
+    #X2=data.frame(covariates.OD, gdata[,pms])
+    #fitme2=lm(t.tpm.matrix[,g]~., data=X2)
 
-plate.oset=which((rownames(plate.pheno.avg) %in% eQTL.seg.names))
-eQTL.oset=which(  eQTL.seg.names %in% rownames(plate.pheno.avg) )
+    # for additive model ---------------------------------------------
+    aov.a = anova(fitme)
+    tssq  = sum(aov.a[,2])
+    a.effs=(aov.a[1:(nrow(aov.a)-1),2]/tssq)
+    coeffs=coefficients(fitme)  
+    peaks.per.gene.augmented[[g]]=ppg
+    peaks.per.gene.augmented[[g]]$var.exp=a.effs
+    peaks.per.gene.augmented[[g]]$lm.coeff=as.vector(coeffs)
+    #----------------------------------------------------------------
+    if(length(pms)>1) {
+        a2=add1(fitme, ~.^2, test='F')
+        nterms=rownames(a2[which(a2[,6]< qthresh2d),])
+        if(length(nterms) > 0)  {
+            fit2=update(fitme, as.formula(paste0('~.+',paste(nterms, collapse=' + '))))
+            lm.2D[[g]]=fit2
+            g2in=model.matrix(fit2)
+            g2int=scale(g2in[,grep(':', colnames(g2in))])
+            qAA=tcrossprod(g2int)/ncol(g2int)
+            rr=  regress(yr~1, ~qA+A+qAA+AA, verbose=T, pos=c(T,T,T,T,T))
+            vc_multiple_components[[g]][['4']]=extract.rr(rr)
+            ints=rownames(a2)[-1]
+            lm.3D.test[[g]]=add1(fit2,  paste0(gsub(':|/', '.', max.peak), ':', ints), test='F')
+        }
+    }
+}
+close(pb)
 
-ppa=plate.pheno.avg[plate.oset,]
-eoa=t.tpm.matrix[eQTL.oset,]
-goa=gdata[eQTL.oset,]
-#copper
-c1=cor(ppa[,7], eoa)
-plot(c1^2)
-plot(c1[1,]^2)
-identify(1:5720, c1[1,]^2, colnames(eoa))
+save(vc_multiple_components, file='/data/eQTL/RData/vc_QTL.RData')
 
-rge=scale(residuals(lm(eoa~covariates.OD[eQTL.oset,])))
-#manganese
-cg=cor(ppa[,25],goa)
-c1=cor(ppa[,25], residuals(lm(eoa~covariates.OD[eQTL.oset,])))
-par(mfrow=c(2,1))
-plot(marker.GR$gcoord, cg[1,]^2, ylab='r^2')
-plot(gene.GR$gcoord, c1[1,]^2, ylab='r^2')
-identify(gene.GR$gcoord, c1[1,]^2, colnames(eoa))
+barplot(colMeans((do.call('rbind', sapply(vc_multiple_components, function(x) x[['4']]$sigma)))))
+# model without qAA 
+qA_A_AA=sapply(vc_multiple_components, function(x) x[['3']]$sigma)
+qA_A_qAA_AA=do.call('cbind', sapply(vc_multiple_components, function(x) x[['4']]$sigma))
+ hist(qA_A_AA['qA',]/(qA_A_AA['qA',]+ qA_A_AA['A',]))
+hist(qA_A_AA['qA',]/(qA_A_AA['qA',]+ qA_A_AA['A',]), breaks=20, xlim=c(0,1))
+ hist(qA_A_qAA_AA['qAA',]/(qA_A_qAA_AA['qAA',]+ qA_A_qAA_AA['AA',]))
+qA_A_qAA_AA[3,]/
+R> mean(qA_A_AA['qA',]/(qA_A_AA['qA',]+ qA_A_AA['A',]))
+[1] 0.7814
+R> median(qA_A_AA['qA',]/(qA_A_AA['qA',]+ qA_A_AA['A',]))
+[1] 0.8041
 
-A.subset=tcrossprod(gdata[eQTL.oset,])/ncol(gdata)
-rgeA=tcrossprod(rge)/ncol(rge)
-
-colnames(ppa)
-
-regress(ppa[,1]~1, ~A.subset, verbose=T)
-
-# contrast 31 tunicamycin vs 12 fluconazole
-r1=regress(ppa[,12]~1, ~A.subset, verbose=T, pos=c(T,T,T))
-r2=regress(ppa[,12]~1, ~A.subset+rgeA, verbose=T, pos=c(T,T,T))
-r3=regress(ppa[,12]~1, ~rgeA, verbose=T, pos=c(T,T,T))
-
-r1$sigma/sum(r1$sigma)
-r2$sigma/sum(r2$sigma)
-r3$sigma/sum(r3$sigma)
-
-
-
-
-#------------------------------------------Visualizing 2D interaction scan results ------------------------------------------------------
-mm2d1=marginal2d.table$m1[marginal2d.table$lod>4.9]
-mm2d2=marginal2d.table$m2[marginal2d.table$lod>4.9]
-mm2d1.ind=marker.GR$gcoord[match(mm2d1,colnames(gdata))]
-mm2d2.ind=marker.GR$gcoord[match(mm2d2,colnames(gdata))]
-
-bins2d=seq(1,1.2e7,99000)
-
-b1=cut(mm2d1.ind, bins2d)
-b2=cut(mm2d2.ind, bins2d)
-
-b3=cbind(as.numeric(b1), as.numeric(b2))
-b3=na.omit(b3)
-b3=b3[order(b3[,1]),]
-
-b4=paste(b3[,1], b3[,2], sep='_')
-b5=rle(b4)
-
-b6=data.frame( do.call('rbind', strsplit(b5$values, '_')), b5$lengths, stringsAsFactors=F)
-b6[,1]=as.numeric(b6[,1])
-b6[,2]=as.numeric(b6[,2])
-par(xaxs='i', yaxs='i')
-plot(bins2d[b6[,1]],bins2d[b6[,2]], type='n', ylim=c(0, max(gcoord.key)), xlim=c(0, max(gcoord.key)),
-     xaxt='n', yaxt='n', xlab='', ylab='') 
-text(bins2d[b6[,1]],bins2d[ b6[,2]], b6[,3], cex=log(b6[,3],7)+.5, col=ifelse(b6[,3]>10, 'red', 'black'))
-abline(v=gcoord.key, lty=1, col='grey')
-abline(h=gcoord.key, lty=1, col='grey')
-abline(0,1)
-#abline(v=marker.GR$gcoord[hp.index], col='blue', lty=2)
-#abline(h=marker.GR$gcoord[hp.index], col='blue', lty=2)
-
-plot(mm2d1.ind, mm2d2.ind, col='#00ff0022', pch=19 , cex=2)
-points(mm2d1.ind, mm2d2.ind, col='#0000ff22', pch=19, cex=2)
-
-plot(hexbin(mm2d1.ind, mm2d2.ind))
-smoothScatter(mm2d1.ind, mm2d2.ind)
-abline(v=gcoord.key, lty=1, col='black')
-
-abline(v=hp.index, lty=2, col='blue')
-abline(h=hp.index, lty=2, col='blue')
 # ---------------------------------------------------------------------------------------------------------------------------------------------
 
 apdgc=split(all.peaks.DS, all.peaks.DS$chr)
 app=lapply(apdgc, function(x) split(x, x$gene))
 
-#Test this ... fast 2D scan for epistasis chromsome by chromosome
-for(pp in 1:5) {
-    VC_2Dp=list()
-    for(cc1 in 1:16) {
-            for(cc2 in cc1:16) {
-                print(paste(cc1, cc2))
-                c1=gdata.s.by.chr[[unique.chrs[cc1]]]
-                c2=gdata.s.by.chr[[unique.chrs[cc2]]]
-                A1=A.mat(c1)/2
-                A2=A.mat(c2)/2
-                VC2=A1*A2
-                s2vc=calcA(pheno.additive.removed.scaled[sample(1:1012),], VC2, do.print=F)
-                VC_2Dp[[paste0(cc1, '_', cc2) ]]=s2vc
-            }
-    }
-    #save(VC_2D, file= '/data/eQTL/RData/stranded/VC_2D.RData')
-    saveRDS(VC_2Dp, file= paste0('/data/eQTL/RData/stranded/VC_2D.RDS.', pp))
-}
+for(g in names(peaks.per.gene)){
+    print(g)
+    peaks.per.gene[[g]]= peaks.per.gene[[g]][!duplicated(peaks.per.gene[[g]]$pmarker),]
+    apeaks = match( peaks.per.gene[[g]]$pmarker, colnames(gdata))
 
-v2=sapply(VC_2D, function(x) sum(x[,1]>.03))
-v3=do.call('rbind', strsplit(names(v2), '_'))
-v4=data.frame(v3,v2, stringsAsFactors=F)
-plot(v4[,1], v4[,2], type='n', ylim=c(1,16), xlim=c(1,16))
-text(as.numeric(v4[,1]), as.numeric(v4[,2]),v4[,3], cex=log10(v4[,3]/10))
+    #newMM.peaks[[i]]
+    ax= paste('gdata[,', apeaks,']', sep='')
+    aq=paste(ax, collapse= ' + ')
+    i=match(g, colnames(pheno.scaled))
+    # where pheno.scaled= t.tpm.matrix with batch as a fixed effect
+    #am=lm(paste('pheno.scaled[,' , i,']' , ' ~ ', (aq), '-1'))
+
+    am=lm(paste('scale(t.tpm.matrix[,' , i,'])' , ' ~ gbatch.fact + ', (aq), '-1'))
+    #plot(LODS[i,])
+    #abline(v=apeaks)
+
+    aov.a = anova(am)
+    tssq=sum(aov.a[,2])
+    a.effs=(aov.a[1:(nrow(aov.a)-1),2]/tssq)
+    coeffs=coefficients(am)  
+    peaks.per.gene[[g]]$peak.ind=apeaks
+    peaks.per.gene[[g]]$var.exp=a.effs[-1]
+    peaks.per.gene[[g]]$lm.coeff=as.vector(coeffs)[-c(1:13)]
+    #va.a = (tssq-aov.a[nrow(aov.a),2])/(tssq)
+    #lms[[g]]=summary(am)$adj.r.squared
+    #lms[[g]]=scale(residuals(am))
+    #summary(am)$adj.r.squared
+    #coefficients(am)
+}  
+da=density(unlist(sapply(peaks.per.gene, function(x) x$var.exp[!x$cis] )))
+di=density(unlist(sapply(peaks.per.gene, function(x) x$var.exp[x$cis] ) ))
+#all.peaks.multiple.regression$var.exp[all.peaks.multiple.regression$cis])
+par(mar = c(4,4,2,4))
+par(xaxs='i', yaxs='i')
+plot(da, xlab='fraction of phenotypic variance', ylab='density', xlim=c(0,0.5),  type='n', main='')
+polygon(da, col=rgb(0, 0, 1,0.3), border=NA)
+polygon(di, col=rgb(1, 0, 0,0.3), border=NA)
+legend('topright', legend=c('distant', 'local'), fill=c(rgb(0, 0, 1,0.3),rgb(1, 0, 0,0.3)))
+
+
+all.peaks.multiple.regression=do.call('rbind', peaks.per.gene)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -936,31 +962,45 @@ save(all.peaks.multiple.regression, file='/home/jbloom/Dropbox/Public/eQTL/all.p
 #note 'LL' = log10(likelihood)
 #Mediation_LOD = LOD32 - LOD10
 
-#LOD32 = LL3 - LL2
-#LOD10 = LL1 - LL0
-
+ # Frank's contrasts fl
 #LL3   = (distant.transcript ~ QTL + covariates)
 #LL2   = (distant.transcript ~ covariates)
 #LL1   = (distant.transcript ~ QTL + covariates + local.transcript)
 #LL0   = (distant.transcript ~ covariates + local.transcript) 
+
+#For Mediation
+#LOD32 = LL3 - LL2
+#LOD10 = LL1 - LL0
+
+#LOD13  = LL1 - LL3
+#LOD12  = LL1 - LL2
+
+##case 1 is LOD12 >>> LOD13
+#case2 is  LOD12    >  LOD13
 
 library(intermediate)
 library(foreach)
 library(doMC)
 registerDoMC(70)
 
+load('/data/eQTL/RData/R_genesInHotspotList_95PadWLD_160902.RData')
+#loads genesInHotspotList
 
 #local.mediation=list()
 hotspot.peaks=do.call('c', htabler[,'peak']) #as.character(htabler$peak)
-
 local.mediation=foreach(h=1:length(hotspot.peaks)) %dopar%  {
    hp=hotspot.peaks[h]
    print(hp)
    mint=marker.GR[marker.GR$mname==hp]
    # all genes within 10 kb of peak marker
    #make this informed by the intervals ###
-   genes.near.hotspot=subsetByOverlaps(gene.GR, mint+10000)
-
+   genes.near.hotspot.int=subsetByOverlaps(gene.GR, mint+10000)
+   genes.near.hotspot95=gene.GR[na.omit(match(as.vector(genesInHotspotList[[h]][[1]]), gene.GR$ORF)),]
+    
+   if(length(genes.near.hotspot95)> length(genes.near.hotspot.int) ) { 
+       genes.near.hotspot=genes.near.hotspot95 } else{
+       genes.near.hotspot=genes.near.hotspot.int       
+   }
    null= lm(t.tpm.matrix~covariates.OD)
    full= lm(t.tpm.matrix~covariates.OD+gdata[,hp])
    rn=residuals(null)
@@ -973,10 +1013,10 @@ local.mediation=foreach(h=1:length(hotspot.peaks)) %dopar%  {
    sig.at.hotspot=which(qhot$qvalue<.05)
    print(length(genes.near.hotspot))
    print(length(sig.at.hotspot))
-   cis.mediation.LOD=array(NA, c(length(sig.at.hotspot), length(genes.near.hotspot), 5) )
+   cis.mediation.LOD=array(NA, c(length(sig.at.hotspot), length(genes.near.hotspot), 9) )
    dimnames(cis.mediation.LOD)[[1]]=names(sig.at.hotspot)
    dimnames(cis.mediation.LOD)[[2]]=genes.near.hotspot$ORF
-   dimnames(cis.mediation.LOD)[[3]]=c('L0', 'L1', 'L2', 'L3', 'mLOD')
+   dimnames(cis.mediation.LOD)[[3]]=c('L0', 'L1', 'L2', 'L3', 'L32', 'L10', 'L12', 'L13', 'mLOD')
    for(cg in 1:length(genes.near.hotspot)) {
         #print(cg)
         cisg=genes.near.hotspot[cg]$ORF
@@ -1003,8 +1043,14 @@ local.mediation=foreach(h=1:length(hotspot.peaks)) %dopar%  {
         L2= -(nrow(sy)/2)*log10(colSums(residuals(M2)^2))
         L1= -(nrow(sy)/2)*log10(colSums(residuals(M1)^2))
         L0= -(nrow(sy)/2)*log10(colSums(residuals(M0)^2))
-        mLOD=(L3-L2)-(L1-L0)
-        m=cbind(L0, L1, L2, L3, mLOD)
+        
+        L32= L3-L2
+        L10 = L1-L0
+        L13 = L1-L3
+        L12 = L1-L2
+
+        mLOD=(L32)-(L10)
+        m=cbind(L0, L1, L2, L3, L32, L10, L12, L13, mLOD)
         if(!is.na(rmcis.ind1)) {
             cis.mediation.LOD[-rmcis.ind1,cg,]=m
         } else {cis.mediation.LOD[,cg,]=m} 
@@ -1012,7 +1058,7 @@ local.mediation=foreach(h=1:length(hotspot.peaks)) %dopar%  {
     return(cis.mediation.LOD)
 }
 names(local.mediation)=hotspot.peaks
-save(local.mediation, file='/data/eQTL/RData/stranded/local.mediation.RData')
+save(local.mediation, file='/data/eQTL/RData/local.mediation.RData')
 lapply(local.mediation, function(x) colSums(apply(x, 2, function(y) {y[,'mLOD']>5}), na.rm=T) )
 
 which(local.mediation[['chrVIII:116378_C/A']][,'YHR005C','mLOD']>5)

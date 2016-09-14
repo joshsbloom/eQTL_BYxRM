@@ -243,6 +243,7 @@ calcA=function(p,A,do.print=T) {
 
 
 
+extract.rr=function(x) {  return( list(sigma=x$sigma, sigma.cov=x$sigma.cov, llik=x$llik)  ) }
 
 
 
@@ -2934,4 +2935,7 @@ aggregatePeaks= function(in.dir, out.file1, out.file2, all.peaks.DS) {
 #pdf(file=big.plot.by.chr, width=10, height=10)
 #
 #dev.off()
+# GO Enrichment
+
+
 
