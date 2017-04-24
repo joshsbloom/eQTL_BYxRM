@@ -5,7 +5,7 @@
 # http://www.r-bloggers.com/poisson-regression-fitted-by-glm-maximum-likelihood-and-mcmc/
 
 
-calc.BLUPS= function(G,Z,Vinv,y,X,B ){    G%*%t(Z)%*%Vinv%*%(y- X%*%B)     }
+calc.BLUPS= function(G,Z,Vinv,y,X,B ){    G%*%crossprod(Z,Vinv)%*%(y- X%*%B)    }
 #using grofit package
 getGrowthStats=function(base.dir, batches=paste0('eQTL', 1:13)) {
     #batches = paste0('eQTL', 1:13)
@@ -553,10 +553,14 @@ find.background.QTL = function (covariates, t.tpm.matrix, pheno.scaled, gdata, g
     return(background.QTL)
 }
 
+
+
+
+
 mapQTL=function(covariates, background.QTL, t.tpm.matrix, pheno.scaled, 
                 gdata, gdata.scaled, 
                 chromosomes=NULL,
-                n.perm=1000, FDR.thresh=.05) {
+                n.perm=1000, FDR.thresh=.05, Arandom=TRUE) {
 
     if(is.null(chromosomes)) { chromosomes=paste0('chr', as.roman(1:16)) } 
     cvec=(do.call('rbind', strsplit(colnames(gdata), ':'))[,1])
@@ -578,26 +582,32 @@ mapQTL=function(covariates, background.QTL, t.tpm.matrix, pheno.scaled,
          })
          preal=do.call('cbind', plist)
          colnames(preal)=colnames(t.tpm.matrix)
-
+         
          presid=preal
-         Aloco=A.mat(do.call('cbind', (gdata.by.chr[-match(cc, names(gdata.by.chr))])))/2
-                 
-         eigA=doEigenA_forMM(presid,Aloco)
-         pb=txtProgressBar(min=1, max=ncol(presid), style=3)
-         for(tp in 1:ncol(presid)){
-             setTxtProgressBar(pb,tp)
-             rr=m.S(presid[,tp], K=Aloco,  theta=eigA$theta, Q=eigA$Q)
-             W=solve(rr[1]*Aloco+rr[2]*diag(nrow(presid)))
-             if(rr[1]>0) {
-                 blups=calc.BLUPS(rr[1]*Aloco,diag(nrow(presid)),W,presid[,tp],matrix(1,nrow(presid),1),0 )[,1]
-                 presid[,tp]=as.vector(presid[,tp] - blups)
-             }
+
+         # remove residual additive effect
+         if(Arandom) {
+            Aloco=A.mat(do.call('cbind', (gdata.by.chr[-match(cc, names(gdata.by.chr))])))/2
+            eigA=doEigenA_forMM(presid,Aloco)
+            svdAloco=svd(Aloco)
+            pb=txtProgressBar(min=1, max=ncol(presid), style=3)
+            for(tp in 1:ncol(presid)){
+                 setTxtProgressBar(pb,tp)
+                rr=m.S(presid[,tp], K=Aloco,  theta=eigA$theta, Q=eigA$Q)
+                ###W=solve(rr[1]*Aloco+rr[2]*diag(nrow(presid)))
+                W=svdAloco$u %*% tcrossprod(diag(1/((svdAloco$d*rr[1])+(rr[2]))), svdAloco$v)
+                if(rr[1]>0) {
+                      blups=calc.BLUPS(rr[1]*Aloco,diag(nrow(presid)),W,presid[,tp],matrix(1,nrow(presid),1),0 )[,1]
+                      presid[,tp]=as.vector(presid[,tp] - blups)
+                }
+            }
+            rm(W)
+            close(pb)
          }
-         rm(W)
-         close(pb)
-     
+         
          preal=presid
          presid=scale(presid)
+         
          #pscale=pheno.scaled
          obsLOD = fasterLOD(nrow(preal),presid,gdata.s.by.chr[[cc]],betas=TRUE,pheno=preal)
          findingPeaks=TRUE
@@ -666,10 +676,12 @@ mapQTL=function(covariates, background.QTL, t.tpm.matrix, pheno.scaled,
               found.q.covs=split(pldfm$pmarker, pldfm$gene)
               
               for(i in pldf$gene){
-                  if(!(i %in% names(background.QTL[[cc]])) ) {
-                      presid.tmp[,i]=scale(residuals(lm(t.tpm.matrix[,i]~covariates+gdata[,found.q.covs[[i]]]))) }
-                  else{
-                     presid.tmp[,i]=scale(residuals(lm(t.tpm.matrix[,i]~covariates+gdata[,background.QTL[[cc]][[i]]]+gdata[,found.q.covs[[i]]])) ) }
+                  # modified 041017
+                  #if(!(i %in% names(background.QTL[[cc]])) ) {
+                  #    presid.tmp[,i]=scale(residuals(lm(t.tpm.matrix[,i]~covariates+gdata[,found.q.covs[[i]]]))) }
+                  #else{
+                  #   presid.tmp[,i]=scale(residuals(lm(t.tpm.matrix[,i]~covariates+gdata[,background.QTL[[cc]][[i]]]+gdata[,found.q.covs[[i]]])) ) }
+                  presid.tmp[,i]=scale(residuals(lm(presid[,i]~gdata[,found.q.covs[[i]]])))
               }
               obsLOD = fasterLOD(nrow(presid.tmp),presid.tmp,gdata.s.by.chr[[cc]],betas=TRUE, pheno=presid.tmp)
               presid=presid.tmp
@@ -767,20 +779,20 @@ eQTL_bigPlot=function(all.peaks, gcoord.key, marker.GR, xlim.ind=NULL) {
         abline(v=gcoord.key, col='grey' )
         abline(h=gcoord.key, col='grey' )
        
-     #new for frank   
-        # add intervals
-     #   mgiL=marker.GR$gcoord[match(CI.l, marker.GR$mname)]
-     #   mgiR=marker.GR$gcoord[match(CI.r, marker.GR$mname)]
-     ##   segments(mgiL[r>0],gene.gcoord[r>0], mgiR[r>0],gene.gcoord[r>0], lwd=.5, col='#80008055')
-     ##   segments(mgiL[r<0],gene.gcoord[r<0], mgiR[r<0],gene.gcoord[r<0], lwd=.5, col='#FFA50055')
-       })
-    #new for frank
-    #gxl=(marker.GR$gcoord[xlim.ind])
-    #cxl=start(marker.GR[xlim.ind])
-    #gtoc=approxfun(cxl, gxl, rule=2)
-    #pcxl=pretty(cxl)
-    #gcxl=gtoc(pcxl)
-    #axis(1, at =gcxl , labels=pcxl)
+        #new for frank   
+           # add intervals
+        #   mgiL=marker.GR$gcoord[match(CI.l, marker.GR$mname)]
+        #   mgiR=marker.GR$gcoord[match(CI.r, marker.GR$mname)]
+        ##   segments(mgiL[r>0],gene.gcoord[r>0], mgiR[r>0],gene.gcoord[r>0], lwd=.5, col='#80008055')
+        ##   segments(mgiL[r<0],gene.gcoord[r<0], mgiR[r<0],gene.gcoord[r<0], lwd=.5, col='#FFA50055')
+          })
+        #new for frank
+        #gxl=(marker.GR$gcoord[xlim.ind])
+        #cxl=start(marker.GR[xlim.ind])
+        #gtoc=approxfun(cxl, gxl, rule=2)
+        #pcxl=pretty(cxl)
+        #gcxl=gtoc(pcxl)
+        #axis(1, at =gcxl , labels=pcxl)
 
        #segments(mgiL[all.peaks$r>0],pgi[all.peaks$r>0], mgiR[all.peaks$r>0],pgi[all.peaks$r>0], lwd=.5, col='#80008055')
        #segments(mgiL[all.peaks$r<0],pgi[all.peaks$r<0], mgiR[all.peaks$r<0],pgi[all.peaks$r<0], lwd=.5, col='#FFA50055')
@@ -812,7 +824,7 @@ buildGeneticMap=function(gdata.by.chr) {
 
 
 # code for hotspot analysis ------------------------------------------------------------------------------------------
-model.QTL.effects = function( t.tpm.matrix, gdata,  keep.transcripts, peaks.per.gene, gbatch.fact, pmarker, cc) {
+model.QTL.effects = function( t.tpm.matrix, gdata,  keep.transcripts, peaks.per.gene, gbatch.fact, pmarker=NULL, cc, docoef=FALSE) {
        tmm=matrix(0, nrow(t.tpm.matrix), length(keep.transcripts))
        mid=match(keep.transcripts, colnames(t.tpm.matrix))
        colnames(tmm)=colnames(t.tpm.matrix)[mid]
@@ -821,8 +833,10 @@ model.QTL.effects = function( t.tpm.matrix, gdata,  keep.transcripts, peaks.per.
        q.cnt=rep(0, length(keep.transcripts))
        q.pos=list()
        names(q.cnt)=colnames(tmm)
+       pb =txtProgressBar(min = 1, max =length(keep.transcripts), style = 3)
        for(i in 1:length(keep.transcripts)) { 
-             #print(i)
+             setTxtProgressBar(pb, i)
+           
              mid.i= mid[i]
              gene.i=colnames(tmm)[i]
              ppgi.a=peaks.per.gene[[gene.i]]
@@ -830,24 +844,34 @@ model.QTL.effects = function( t.tpm.matrix, gdata,  keep.transcripts, peaks.per.
              q.pos[[gene.i]]=ppgi.a$pcind[ppgi.a$chr==cc]
              ppgi=ppgi.a[ppgi.a$chr!=cc,]
              if(is.null(ppgi)) {
-                 if(length(pmarker>1)){   tmm[,i]=scale(residuals(lm(t.tpm.matrix[,mid.i]~gbatch.fact+gdata[,pmarker])))
-                 } else {tmm[,i]=scale(residuals(lm(t.tpm.matrix[,mid.i]~gbatch.fact))) }
+                 if(length(pmarker>1)){ 
+                        l1= lm(t.tpm.matrix[,mid.i]~gbatch.fact+gdata[,pmarker])
+                 } else {
+                     l1=lm(t.tpm.matrix[,mid.i]~gbatch.fact)
+                 }
              }else {
                  if(nrow(ppgi)==0) {
                      if(length(pmarker>1)){ 
-                     tmm[,i]=scale(residuals(lm(t.tpm.matrix[,mid.i]~gbatch.fact+gdata[,pmarker])))   } else {
-                     tmm[,i]=scale(residuals(lm(t.tpm.matrix[,mid.i]~gbatch.fact)))
+                         l1=lm(t.tpm.matrix[,mid.i]~gbatch.fact+gdata[,pmarker])
+                     } else {
+                         l1=lm(t.tpm.matrix[,mid.i]~gbatch.fact)
                      }      
-                 next;
+                 #next;
                  } else {
                      bQTL=gdata[,ppgi$gcind[ppgi$chr!=cc]]
                      if(length(pmarker>1)) {
                          #print(i)
-                     tmm[,i]=scale(residuals(lm(t.tpm.matrix[,mid.i]~gbatch.fact+bQTL+gdata[,pmarker])))
-                     } else{tmm[,i]=scale(residuals(lm(t.tpm.matrix[,mid.i]~gbatch.fact+bQTL) ) ) }
+                          l1=lm(t.tpm.matrix[,mid.i]~gbatch.fact+bQTL+gdata[,pmarker])
+
+                     } else{
+                         l1=lm(t.tpm.matrix[,mid.i]~gbatch.fact+bQTL)
+
+                     }
                  }
              }
+       tmm[,gene.i]=scale(residuals(l1))
        }
+       close(pb)
        return(tmm)
 }
 
@@ -1201,11 +1225,13 @@ removeAdditiveEffects =function(t.tpm.matrix, background.QTL, covariates, gdata)
          A=A.mat(gdata)/2
                  
          eigA=doEigenA_forMM(presid,A)
+         svdA=svd(A)
          pb=txtProgressBar(min=1, max=ncol(presid), style=3)
          for(tp in 1:ncol(presid)){
              setTxtProgressBar(pb,tp)
              rr=m.S(presid[,tp], K=A,  theta=eigA$theta, Q=eigA$Q)
-             W=solve(rr[1]*A+rr[2]*diag(nrow(presid)))
+             #W=solve(rr[1]*A+rr[2]*diag(nrow(presid)))
+             W=svdA$u %*% tcrossprod(diag(1/((svdA$d*rr[1])+(rr[2]))), svdA$v)
              if(rr[1]>0) {
                  blups=calc.BLUPS(rr[1]*A,diag(nrow(presid)),W,presid[,tp],matrix(1,nrow(presid),1),0 )[,1]
                  presid[,tp]=as.vector(presid[,tp] - blups)
@@ -2936,6 +2962,316 @@ aggregatePeaks= function(in.dir, out.file1, out.file2, all.peaks.DS) {
 #
 #dev.off()
 # GO Enrichment
+doGO=function(all.genes, set.of.interest, ontology='BP') {
+#for( thisOntology in c("BP", "MF", "CC") ) {
+    geneList=set.of.interest
+    testGenes= factor(0+(all.genes %in% geneList))
+    names(testGenes)=all.genes
+    #colnames(t.tpm.matrix)
+    GOData = new("topGOdata", ontology=thisOntology, allGenes = testGenes, annot = annFUN.gene2GO, gene2GO = gene2GOList, nodeSize=3)
+    GOresult = runTest(GOData, algorithm="classic", statistic="fisher")
+    gt=GenTable(GOData, GOresult, numChar=140, topNodes = length(score(GOresult)))
+    gt$result1=as.numeric(gsub('< ', '', gt$result1))
+    genesinterms=genesInTerm(GOData, gt[,1])
+    genes.enriched.list=lapply(genesinterms, function(x) x[x%in%names(testGenes[testGenes==1])])
+    genes.enriched.list.simple=lapply(genes.enriched.list, function(x) as.character(SYS2ORF.key[x]))
+    gt$Genes=as.vector(sapply(genes.enriched.list.simple, paste, collapse=','))
+    gt$GenesSystematic=   as.vector(sapply(genes.enriched.list, paste, collapse=','))
+    print(head(gt,20))
+    # pdf(file=paste0('/data/eQTL/RData/GO/', 'epistatic_transcripts', '_', thisOntology, '.pdf'), width=25, height=25)
+    #     plotGOToTree(GOData, GOresult, sigThres = 0.00005)
+    #  dev.off()
+    #write.table(gt, file=paste0('/data/eQTL/RData/GO/', 'epistatic_transcripts', '_', thisOntology, '.txt'), quote=FALSE, row.names=FALSE, col.names=TRUE, sep='\t')
+    return(gt)
+}
+
+#multivariate scanone
+# returns logDetRSSfull
+# 01 12 17 new hotspot code 
+mvn.scanone=function(g.s, Y,add.cov=NULL, roi1=NULL) {
+         
+           ldetRSSf.1=rep(NA, ncol(g.s))
+           if(!is.null(roi1)) { ss=roi1 } else { ss=1:ncol(g.s) } 
+           for(i in min(ss):max(ss)) {
+               #ldetRSSf.1[i]=det_AtA(residuals(.lm.fit(as.matrix(g.s[,i]), Y)))
+               if(is.null(add.cov) ) {
+                RSSf.1=crossprod(residuals(.lm.fit(as.matrix(g.s[,i]), Y)))
+               } else {
+                RSSf.1=crossprod(residuals(.lm.fit(cbind(add.cov, g.s[,i]), Y)))
+               }
+               ldetRSSf.1[i]=determinant(RSSf.1, logarithm=T)$modulus
+           }
+           return(ldetRSSf.1)
+       }
+
+# function to do scantwo
+# add code to add additional covariates
+    mvn.scantwo=function(g.s, Y, roi1 ,add.cov=NULL) {
+        ldetRSSf.2=matrix(NA, length(roi1), length(roi1))
+        #XX=as.matrix(add.cov)
+        for(i in min(roi1):(max(roi1)-10) ) {
+           for(j in (i+10):max(roi1) ){
+            #print(i)
+            # could add in additional covariates here
+            if(is.null(add.cov) ) {
+               RSSf.2=crossprod(residuals(.lm.fit(cbind(g.s[,i],g.s[,j]),Y)))
+            } else{
+                RSSf.2=crossprod(residuals(.lm.fit(cbind(add.cov,g.s[,i],g.s[,j]),Y)))
+            }
+            ldetRSSf.2[(i-(min(roi1)-1)),(j-(min(roi1)-1))]=determinant(RSSf.2, logarithm=T)$modulus
+            #mlvec.1[i]=1012*(ldetRSSn.1-ldetRSSf.1)/(2*log(10))
+            }
+        }
+           return(ldetRSSf.2)
+     }
+
+mvn.scanthree=function(g.s, Y, roi1, mv2Dpeak, add.cov=NULL) {
+    ldetRSSf.3=rep(NA, ncol(g.s)) #length(roi))
+     for(i in roi1) {
+            if( (abs(i-mv2Dpeak[1])>4) & (abs(i-mv2Dpeak[2])>4) ) {
+             if(is.null(add.cov) ) {
+               RSSf.3=crossprod(residuals(.lm.fit(cbind(g.s[,mv2Dpeak[1]], g.s[,mv2Dpeak[2]], g.s[,i]),Y)))
+            } else{
+                RSSf.3=crossprod(
+                                residuals(.lm.fit(cbind(add.cov, g.s[,mv2Dpeak[1]], g.s[,mv2Dpeak[2]], g.s[,i]),Y) )
+                                 )
+            }
+            #   mtest=.lm.fit(cbind(g.s[,mv2Dpeak[1]], g.s[,mv2Dpeak[2]], g.s[,i]), Y) #~g.s[,i])    
+            #RSSf.3=crossprod(residuals(mtest))
+            ldetRSSf.3[i]=determinant(RSSf.3, logarithm=T)$modulus
+            }
+       }
+    return(ldetRSSf.3)
+}
 
 
 
+getROI=function(mvLOD.1, g.s, n=40) {
+         #roi1=range(which(mvLOD.1> max(mvLOD.1)-50))
+         wm=which.max(mvLOD.1)
+         m=max(mvLOD.1)
+         if(m>1 & m<ncol(g.s)) {
+            if(mvLOD.1[wm-1]==0 | mvLOD.1[wm+1]==0 ) { 
+            mvLOD.1[wm]=0
+            wm=which.max(mvLOD.1)
+            }
+         }
+               
+         roi.l1=ifelse( (wm-n)<1,1,wm-n)
+         roi.r1=ifelse( (wm+n)>ncol(g.s), ncol(g.s), wm+n  )
+         roi1=roi.l1:roi.r1 #[2] #[1]:roi[2]
+         return(roi1 )#[1]:roi1[2])
+     }
+
+
+permKmeans=function(Y, n.kmeans=15, n.perm=10) {
+    #perm.maxdiff=rep(NA, n.perm)
+    perm.maxdiff=foreach(n=1:n.perm, .combine=c ) %dopar% {
+    #Y=fC$r
+        print(n)
+        permr=apply(Y,1, function(x) sample(x) )
+        kmean.listN=list()
+        for(i in 1:n.kmeans) {
+               kmean.listN[[as.character(i)]]=kmeans(permr, centers=i)
+        }
+        #perm.maxdiff=
+        return(max(diff(sapply(kmean.listN, function(x) x$betweenss)/sapply(kmean.listN, function(x) x$totss))))
+    }
+    return(perm.maxdiff)
+}
+
+# refactor this ... calculating this when X is large needs to be slimmed down
+calc.composite.MV.LOD=function(detected1D, Ysub, g.s)  {
+    print('calculating composite LOD')
+    compositeMVN.1D=list()
+    for(ii in 2:ncol(detected1D) ) { 
+        #colnames(detected1D)[-1] ) {
+           i=colnames(detected1D)[ii]
+           pm=match(i, colnames(detected1D))
+           pnull=determinant(crossprod(residuals(.lm.fit(detected1D[,-pm],Ysub))), logarithm=T)$modulus
+           pscan=mvn.scanone(g.s, Ysub, add.cov=detected1D[,-pm])
+           compositeMVN.1D[[i]]=( 1012*(pnull-pscan)/(2*log(10)))
+
+           print(paste(i, colnames(g.s)[which.max( compositeMVN.1D[[i]])]))
+        }
+       compositeMVN.1D=do.call('rbind',  compositeMVN.1D)
+       rownames( compositeMVN.1D) = colnames(detected1D)[-1]
+       return(compositeMVN.1D)
+}
+
+           #compositeMVN.1D=foreach(i=colnames(detected1D)[-1]  ) %dopar% {
+
+plotMV.LOD=function(compositeMVN.1D, g.s, g.s.pos, steps=FALSE)  {
+    p.detected=match(rownames(compositeMVN.1D), colnames(g.s))
+    plot(g.s.pos, compositeMVN.1D[1,], ylim=c(0,max(compositeMVN.1D)), ylab='mvLOD', xlab='chromosome position')
+     for(j in 2:nrow(compositeMVN.1D)){ 
+         if(steps) {         readline();    }
+         points(g.s.pos, compositeMVN.1D[j,], col=j)      }
+     abline(v=g.s.pos[p.detected], col=1:nrow(compositeMVN.1D))
+}
+
+relocate.peaks=function(compositeMV.LOD, g.s, g.s.pos ,detected1D, max.move=75000) {
+       # use this to relocalize signal
+       
+       peak.relocate=colnames(g.s)[apply(compositeMV.LOD,1, which.max)]
+       
+       peak.o.pos = g.s.pos[colnames(detected1D)[-1]]
+       peak.n.pos = g.s.pos[apply(compositeMV.LOD,1, which.max)]
+        
+       detected1D.2=cbind(detected1D[,1], g.s[,match(peak.relocate, colnames(g.s))] )
+       colnames(detected1D.2)=c('Intercept', peak.relocate)
+       
+       pdiff = abs(peak.o.pos-peak.n.pos)
+       pdiff.ind= as.numeric(which(pdiff<max.move))+1
+       return( detected1D.2[,c(1,pdiff.ind)] )
+
+}
+
+
+calcIndividualEffects_afterMV=function(tmms, detected1D, dfin){
+
+      fullmodel=mclapply(colnames(tmms), {function(i) lm(tmms[,i]~.-1, data=dfin)}, mc.cores=60)
+      names(fullmodel)=colnames(tmms)
+      dropterms=mclapply(colnames(tmms), {function(i) dropterm(fullmodel[[i]], test='F') }, mc.cores=60)
+      allp=lapply(dropterms, function(x)x$"Pr(F)"[-1])
+      allpv=unlist(allp)
+      
+      bet=list()
+      for(i in 1:ncol(tmms)) {
+            #print(i)
+            tokeep=which(allp[[i]]<.05)
+            dfr=dfin[,tokeep]
+            if(is.null(dim(dfr))) { dfr=data.frame(dfr); names(dfr)=colnames(dfin)[tokeep]; }
+            if(ncol(dfr)>0 ) {
+                bet[[colnames(tmms)[i]]]=(lm(tmms[,i]~.-1., data=dfr))
+            }
+      }
+      return(bet)
+
+}
+
+doMV.bootstraps=function(detected1D, compositeMV.LOD, Ysub, g.s) {
+    boots=list()
+      for(peaks in colnames(detected1D)[-1] ) {
+          print(peaks)
+          pm = match(peaks, colnames(detected1D))
+          roi1=getROI(compositeMV.LOD[(pm-1),],g.s)
+          bootpos=rep(NA,1000)
+          pb =txtProgressBar(min = 1, max = 1000, style = 3)
+
+          for(bb in 1:1000) {
+             smpme=sample(1:1012, replace=T)
+             bnull=determinant(crossprod(residuals(lm(Ysub[smpme,]~1))), logarithm=T)$modulus
+             pM=mvn.scanone(g.s[smpme,], Ysub[smpme,],add.cov=detected1D[smpme,-pm] , roi1 )
+             bmvLOD.1=1012*(bnull-pM)/(2*log(10))
+             setTxtProgressBar(pb, bb)
+             bootpos[bb]=which.max(bmvLOD.1)
+        }
+        close(pb)
+        boots[[peaks]]=bootpos
+        print(colnames(g.s)[quantile(bootpos, c(.025, .975))])
+      }
+    return(boots)
+}
+
+#stat.mat is dim n x number of permutations
+doFDR = function (stat.range, stat.vec, stat.mat, threshold) {
+     stest=stat.range
+     maxr2= stat.vec
+     maxr2.perm= stat.mat
+
+     obsPcnt=sapply(stest, function(thresh) sum(maxr2>thresh, na.rm=T))
+     names(obsPcnt)=stest   
+     expPcnt = sapply(stest,  
+                         function(thresh) { 
+                            mean(apply(maxr2.perm, 2, function(ll) {sum(ll>thresh, na.rm=T) } ))
+                         })
+     names(expPcnt) = stest
+     
+     pFDR = expPcnt/obsPcnt
+     pFDR[is.na(pFDR)]=0
+     pFDR = rev(cummax(rev(pFDR)))
+    # if(sum(is.na(pFDR))>5) {
+    #   print('this')
+    #   return(999) } #break;}
+
+   fdrFX=approxfun(pFDR, stest)
+   #seq(1.5,6,.01))
+   thresh=fdrFX(threshold)
+   return(thresh)
+
+}
+
+
+
+
+#      dboot=names(dfin)[6]
+#      tt=drop.terms(terms(bet2[[1]]), dropx=4, keep.response=T)
+#      t1=update(bet2[[1]], tt )
+#      a1[i]=add1(t1, ~. + g.s[,i], test='Chisq')[2,5] #
+
+# do CV ... create 13 random splits ... keep track of splits, find peaks in 12 of 13 sets and then estimate variance explained in the 13th set
+# refit full model (keep AOV info)
+# hard crash?? start here
+# recreate this
+#load('/data/eQTL/RData/062016.RData')
+# do cross validation -------------------------------------------------------------------------------------------------------------------(run once)
+doCV = function(gbatch.fact, covariates.OD, t.tpm.matrix, pheno.scaled.OD, gdata) {
+    n.groups=length(levels(gbatch.fact))
+    for(icv in 1:n.groups) {
+        rmgroup1=which(gbatch.fact %in% levels(gbatch.fact)[icv])
+        covariates.OD.c1=covariates.OD[-rmgroup1,]
+        t.tpm.matrix.c1=t.tpm.matrix[-rmgroup1,]
+        pheno.scaled.OD.c1=pheno.scaled.OD[-rmgroup1,]
+        gdata.c1=gdata[-rmgroup1,]
+        gdata.scaled.c1=scale(gdata.c1)
+        background.QTL.OD.c1 = find.background.QTL(covariates.OD.c1,t.tpm.matrix.c1, pheno.scaled.OD.c1, gdata.c1, gdata.scaled.c1)
+        peakList.OD.c1=mapQTL(covariates.OD.c1, background.QTL.OD.c1,
+                          t.tpm.matrix.c1, pheno.scaled.OD.c1, gdata.c1, gdata.scaled.c1,
+                          n.perm=100, FDR.thresh=.05)
+        saveRDS(peakList.OD.c1, file=paste0('/data/eQTL/RData/cross_validation_peaks',icv))
+        print(sum(sapply(sapply(peakList.OD.c1, function(x) { sapply(x, function(y) nrow(y) ) } ), sum)))
+    }
+}
+#sum(sapply(sapply(peakList.OD.c1, function(x) { sapply(x, function(y) nrow(y) ) } ), sum))
+
+
+
+# load cross-validation ----------------------------------------------------------------------------------------------------------------------------
+loadCV = function(gbatch.fact, covariates.OD, t.tpm.matrix, gdata) {
+    n.groups=length(levels(gbatch.fact))
+    cvVE=list()
+    for(icv in 1:n.groups) {
+        print(icv)
+        peakList.OD.c1=readRDS(file=paste0('/data/eQTL/RData/cross_validation_peaks',icv))
+        all.peaks.OD.c1=buildPeakListDF(peakList.OD.c1,gdata,gene.GR, marker.GR)
+        peaks.per.gene.c1=split(all.peaks.OD.c1, all.peaks.OD.c1$gene)
+        rmgroup1=which(gbatch.fact %in% levels(gbatch.fact)[icv])
+
+        for(g in names(peaks.per.gene.c1)) {
+        #g=names(peaks.per.gene.c1)[100]
+            ppg=peaks.per.gene.c1[[g]][!duplicated(peaks.per.gene.c1[[g]]$pmarker),]
+            #ppg=peaks.per.gene[[g]][!duplicated(peaks.per.gene[[g]]$pmarker),]
+            
+            apeaks = match(ppg$pmarker, colnames(gdata))
+            #print(apeaks)
+            #match(peaks.per.gene[[g]]$pmarker, colnames(gdata))
+
+            X2=gdata[,apeaks]
+            #X=data.frame(covariates.OD, gdata[,apeaks])
+            yr=residuals(lm(t.tpm.matrix[,g]~covariates.OD))
+            yr.train=yr
+            yr.test=yr
+            yr.train[rmgroup1]=NA
+            fitme=lm(yr.train~.-1, data=data.frame(X2))
+            if(is.null(dim(X2))){ 
+                predicted=X2[rmgroup1]*coef(fitme)
+            }else {
+                predicted=X2[rmgroup1,]%*%coef(fitme)
+            }
+            cvVE[[g]]=c(cvVE[[g]], cor(yr.test[rmgroup1], predicted)^2)
+        }
+    }
+    return(cvVE)
+}
+#-------------------------------------------------------------------------------------------------------------------
