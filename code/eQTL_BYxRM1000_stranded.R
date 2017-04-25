@@ -129,8 +129,25 @@ gdata=counts$gdata
 
 
 # Construct LD for full marker set -----------------------------------------------------------------------------------------
-cvec=c(do.call('rbind', strsplit(colnames(gdata), ':'))[,1])
+#cvec=c(do.call('rbind', strsplit(colnames(gdata), ':'))[,1])
 #unique.chrs=paste0('chr', as.roman(1:16))
+#gdata.by.chr=list()
+#gdata.s.by.chr=list()
+#for(cc in unique.chrs) {   
+        #gdata.by.chr[[cc]]=gdata[,which(cvec %in% cc)]   
+        #gdata.s.by.chr[[cc]]=scale(gdata.by.chr[[cc]])
+        
+#}
+#marker.LD=lapply(gdata.by.chr, cor)
+#save(marker.LD, file='/data/eQTL/RData/marker.LD.RData')
+#---------------------------------------------------------------------------------------------------------------------------
+
+# remove completely correlated markers
+gdata=gdata[,!duplicated(gdata, MARGIN=2)]
+
+# Reconstruct chromosome level lists of markers, remove perfectly correlated markers
+cvec=c(do.call('rbind', strsplit(colnames(gdata), ':'))[,1])
+unique.chrs=paste0('chr', as.roman(1:16))
 gdata.by.chr=list()
 gdata.s.by.chr=list()
 for(cc in unique.chrs) {   
@@ -138,12 +155,14 @@ for(cc in unique.chrs) {
         gdata.s.by.chr[[cc]]=scale(gdata.by.chr[[cc]])
         
 }
-#marker.LD=lapply(gdata.by.chr, cor)
-#save(marker.LD, file='/data/eQTL/RData/marker.LD.RData')
-#---------------------------------------------------------------------------------------------------------------------------
+#build genetic map -----------------
+genetic.map=buildGeneticMap(gdata.by.chr)
+genetic.map.c=as.vector(unlist(genetic.map))
+names(genetic.map.c)=as.vector(unlist(sapply(genetic.map, names)))
 
-# remove completely correlated markers
-gdata=gdata[,!duplicated(gdata, MARGIN=2)]
+# remove perfectly correlated markers 
+gdata.downsampled=downsampleMarkers(gdata.by.chr, gdata.s.by.chr)
+
 
 # useful for accelerated mapping function
 gdata.scaled=scale(gdata)
@@ -591,7 +610,7 @@ peaksModel=foreach(g = names(peaks.per.gene)) %dopar% {
 
     peaks_model2$df$var.exp=a.effs
     peaks_model2$df$lm.coeff=as.vector(coeffs)[-c(1:14)]
-    peaks_model2$fit=fitme
+    #peaks_model2$fit=fitme
 
     #if(length(apeaks)>1) {
     #     int.space= colnames(model.matrix(~.^2-1, X2))[-c(1:length(apeaks))]
