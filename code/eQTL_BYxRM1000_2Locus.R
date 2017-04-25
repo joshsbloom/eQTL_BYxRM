@@ -143,18 +143,12 @@ qthresh2d=10^(-2.9) #.001
 
 
 #peaks.per.gene.augmented=list()
-#vc_multiple_components=list()
-#lm.2D=list()
-
-
-A=tcrossprod(gdata.scaled)/ncol(gdata.scaled)
-AA=A*A
 #Ahot=tcrossprod(gdata.scaled[,sort(match(as.character(htabler[,
 # split this up into separate chunks 09 16 16
 
 peaksModel=list()
 lm.2D=list()
-lm.3D.test=list()
+lm.3D=list()
 pb =txtProgressBar(min = 1, max = length(peaks.per.gene), style = 3)
 for(gg in 1:length(peaks.per.gene)) {
     setTxtProgressBar(pb, gg)
@@ -187,7 +181,7 @@ for(gg in 1:length(peaks.per.gene)) {
     a.effs=(aov.a[1:(nrow(aov.a)-1),2]/tssq)
     coeffs=coefficients(fitme)  
     peaksModel[[g]]$var.exp.Resid=a.effs
-    peaksModel[[g]]$lm.coeff.Raw=as.vector(coeffs)
+    peaksModel[[g]]$lm.coeff.Resid=as.vector(coeffs)
 
      if(length(ppg$pmarker)>1) {
             a2=add1(fitme, ~.^2, test='F')
@@ -197,7 +191,7 @@ for(gg in 1:length(peaks.per.gene)) {
                 lm.2D[[g]]=fit2
                 ints=rownames(a2)[-1]
                 max.peak=ppg$pmarker[which.max(ppg$LOD)]
-                lm.3D.test[[g]]=add1(fit2,  paste0(gsub(':|/', '.', max.peak), ':', ints), test='F')
+                lm.3D[[g]]=add1(fit2,  paste0(gsub(':|/', '.', max.peak), ':', ints), test='F')
                 }
      }
 }
@@ -207,8 +201,7 @@ lm.2D.count=sapply(lm.2D, function(x) {  sum(grepl(':', names(coef(x))))   })
 sum(lm.2D.count)
 [1] 1464
 
-
-ps.3D=na.omit(unlist(sapply(lm.3D.test, function(x) x[,6])))
+ps.3D=na.omit(unlist(sapply(lm.3D, function(x) x[,6])))
 #sum(qvalue(ps.3D)$qvalue<.1)
 # 16
 q3d=qvalue(ps.3D)
@@ -235,6 +228,7 @@ boxplot(pheno.scaled.OD[,'YFL059W']~gdata[,'chrVI:30187_G/A']+gdata[,'chrX:72213
 #chrXIII FET4
 #PHR1 or FRE5
 
+# Structure 2D interactions 
 
 lm.2D.df=list()
 for(goi in names(lm.2D)) {
@@ -310,6 +304,46 @@ dev.off()
 #plot(Intervals(cint), col=ifelse(lm.2D.df.long$coef2D>0, 'orange', 'purple'),  use_point=F, use_names=F)
 
 
+vc_multiple_components=list()
+A=tcrossprod(gdata.scaled)/ncol(gdata.scaled)
+AA=A*A
+pb =txtProgressBar(min = 1, max = length(peaks.per.gene), style = 3)
+for(gg in 1:length(peaks.per.gene)) {
+    setTxtProgressBar(pb, gg)
+    g=names(peaks.per.gene)[gg]
+    yr=pheno.scaled.OD[,g]
+    ppg=peaks.per.gene[[g]][!duplicated(peaks.per.gene[[g]]$pmarker),]
+    apeaks = match( ppg$pmarker, colnames(gdata))
+
+    pms=ppg$pmarker
+    max.peak=ppg$pmarker[which.max(ppg$LOD)]
+    qA=tcrossprod(gdata.scaled[,pms])/length(pms)
+   
+    rr=regress(yr~1, ~A+AA, verbose=F, pos=c(T,T,T,T,T,T))
+    vc_multiple_components[[g]][['A_AA']]=extract.rr(rr)
+
+    ##rr=regress(yr~1, ~qA+Ahot+A, verbose=F, pos=c(T,T,T,T,T,T,T))
+    ##vc_multiple_components[[g]][['1']]=extract.rr(rr)
+    
+    if(sum(ppg$cis)>0 & sum(!ppg$cis>0) ) {
+        A.local=tcrossprod(gdata.scaled[,pms[ppg$cis]])/sum(ppg$cis)
+        A.distant=tcrossprod(gdata.scaled[,pms[!ppg$cis]])/sum(!ppg$cis)
+        A.local_X_A=A.local*A
+        A.distant_X_A=A.distant*A
+        rr=regress(yr~1, ~A.local + A.distant + A + A.local_X_A + A.distant_X_A + AA, verbose=F, pos=c(T,T,T,T,T,T,T))
+        vc_multiple_components[[g]][['local_distant']]=extract.rr(rr)
+    }    
+ 
+    if(!is.null(lm.2D[[g]]) ) {
+        g2in=model.matrix(fit2)
+        g2int=scale(g2in[,grep(':', colnames(g2in))])
+        qAA=tcrossprod(g2int)/ncol(g2int)
+
+        rr=  regress(yr~1, ~qA+A+qAA+AA, verbose=F, pos=c(T,T,T,T,T))
+        vc_multiple_components[[g]][['QTL']]=extract.rr(rr)
+    }
+}
+close(pb)
 
 
 
