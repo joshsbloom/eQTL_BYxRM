@@ -15,7 +15,6 @@ hotspot.pheno=list()
 hotspot.geno=list()
 only1D=list()
 
-
 #### code to detect hotspots
 #for(cc in unique.chrs) { 
 for(cc in unique.chrs[-c(17)] ) {

@@ -20,25 +20,25 @@ pheno.additive.removed.scaled=scale(pheno.additive.removed)
 # sanity check that additive signal is gone
 #scanoneLODS.ar=fasterLOD(nrow(pheno.additive.removed.scaled),pheno.additive.removed.scaled,gdata.scaled, betas=TRUE)
 
-#AA=(tcrossprod(gdata.scaled)/ncol(gdata.scaled))^2
+AA=(tcrossprod(gdata.scaled)/ncol(gdata.scaled))^2
 ## this should be about the same as the 
-#vcAA=calcA(pheno.additive.removed.scaled, AA)
+vcAA=calcA(pheno.additive.removed.scaled, AA)
 #h2AA=vcAA[,1]/(vcAA[,1]+vcAA[,2])
 
-#set.seed(10)
-#yAA.perm=replicate(10, {pheno.additive.removed.scaled[sample(1:1012),]})
-#WG.2D.VC.perm=sapply(1:10, function(p) {
-#    vcAA=calcA(yAA.perm[,,p], AA)
-#    return(vcAA[,1]/(vcAA[,1]+vcAA[,2]))
-#})
+set.seed(10)
+yAA.perm=replicate(10, {pheno.additive.removed.scaled[sample(1:1012),]})
+WG.2D.VC.perm=sapply(1:10, function(p) {
+    vcAA=calcA(yAA.perm[,,p], AA)
+    return(vcAA[,1]) #/(vcAA[,1]+vcAA[,2]))
+})
 
-#o2dvc=sapply(seq(0,1,.005), function(x) sum(h2AA > x ) )
-#names(o2dvc)=seq(0,1,.005)
-#e2dvc=rowMeans(apply(WG.2D.VC.perm, 2, function(y) { sapply(seq(0,1,.005) , function(x) sum( y > x ) )     }))
-#names(e2dvc)= seq(0,1,.005)
+o2dvc=sapply(seq(0,.5,.001), function(x) sum(h2AA > x ) )
+names(o2dvc)=seq(0,.5,.001)
+e2dvc=rowMeans(apply(WG.2D.VC.perm, 2, function(y) { sapply(seq(0,.5,.001) , function(x) sum( y > x ) )     }))
+names(e2dvc)= seq(0,.5,.001)
 
-#e2dvc/o2dvc
-#colnames(t.tpm.matrix)[which(h2AA>.4)]
+e2dvc/o2dvc
+colnames(t.tpm.matrix)[which(h2AA>.4)]
 #FDR 10%
 # h2AA>0.39 
 
@@ -239,8 +239,13 @@ for(goi in names(lm.2D)) {
     #goi='YAL039C'
     #lm.2D[[goi]]
     ppga=peaks.per.gene[[goi]]
-    c2d=coef(lm.2D[[goi]])
+    lm.goi=lm.2D[[goi]]
+    aov.a = anova(lm.goi)
+    tssq  = sum(aov.a[,2])
+    a.effs=(aov.a[1:(nrow(aov.a)-1),2]/tssq)
+    c2d=coefficients(lm.goi)  
     c2d=c2d[grep(':', names(c2d))]
+    vexp2d=a.effs[grep(':', rownames(aov.a))]
     c2d.df=do.call('rbind', strsplit(names(c2d), ':'))
     pmarker.mod=gsub('\\:|\\/', '.', ppga$pmarker)
 
@@ -249,6 +254,7 @@ for(goi in names(lm.2D)) {
 
     lm.2D.df[[goi]]=data.frame(
                coef2D=as.numeric(c2d),
+               vexp2D=as.numeric(vexp2d),
                m1.pmarker=ppga$pmarker[m1.ind],
                m2.pmarker=ppga$pmarker[m2.ind],
                m1.gcoord=ppga$marker.gcoord[m1.ind],
@@ -278,6 +284,29 @@ plot(cint[,1], cint[,2], col= lm.2D.df.long$partner.cis+1, pch=21, xlab='QTL 1 p
 points(cint[,2], cint[,1], col= lm.2D.df.long$partner.cis+1, pch=21)
 abline(v=gcoord.key, lty=2, col='lightblue')
 abline(h=gcoord.key, lty=2, col='lightblue')
+
+full2d.table$m1.gcoord=marker.GR$gcoord[match(full2d.table$m1, marker.GR$mname)]
+full2d.table$m2.gcoord=marker.GR$gcoord[match(full2d.table$m2, marker.GR$mname)]
+
+marginal2d.table$m1.gcoord=marker.GR$gcoord[match(marginal2d.table$m1, marker.GR$mname)]
+marginal2d.table$m2.gcoord=marker.GR$gcoord[match(marginal2d.table$m2, marker.GR$mname)]
+pdf(file='~/Desktop/2Dscans_2.pdf',width=11, height=11)
+#par(mfrow=c(1,3)) #, xaxs='i', yaxs='i')
+plot(full2d.table$m1.gcoord, full2d.table$m2.gcoord, xlab='QTL 1 position', ylab='QTL 2 position', main='', xaxt='n', yaxt='n',
+     xlim=c(0, max(cint[,2])), ylim=c(c(0, max(cint[,2]))), pch=20, col='#0000FF44', cex=2)
+#abline(v=gcoord.key, lty=2, col='lightblue')
+#abline(h=gcoord.key, lty=2, col='lightblue')
+
+points(marginal2d.table$m1.gcoord, marginal2d.table$m2.gcoord, xlab='QTL 1 position', ylab='QTL 2 position', main='Marginal Scan',xaxt='n', yaxt='n',
+     xlim=c(0, max(cint[,2])), ylim=c(c(0, max(cint[,2]))), pch=20, col='#FFFF0044', cex=2)
+#abline(v=gcoord.key, lty=2, col='lightblue')
+#abline(h=gcoord.key, lty=2, col='lightblue')
+
+points(cint[,1], cint[,2], xlab='QTL 1 position', ylab='QTL 2 position', main='QTL Scan',xaxt='n', yaxt='n',
+     xlim=c(0, max(cint[,2])), ylim=c(c(0, max(cint[,2]))), pch=20, col='#00000044', cex=2)
+abline(v=gcoord.key, lty=2, col='lightblue')
+abline(h=gcoord.key, lty=2, col='lightblue')
+dev.off()
 
 #plot(lm.2D.df.long$m1.gcoord, lm.2D.df.long$t.gcoord, col=lm.2D.df.long$partner.cis+1, pch=20, xlab='QTL position', ylab='transcript position')
 #points(lm.2D.df.long$m2.gcoord, lm.2D.df.long$t.gcoord, col=lm.2D.df.long$partner.cis+1, pch=20)
@@ -348,9 +377,25 @@ for(gg in 1:length(peaks.per.gene)) {
 }
 close(pb)
 #save(vc_multiple_components, file='/data/eQTL/RData/vc_multiple_components_042617.RData')
+stripchart(data.frame(t(sapply(vc_multiple_components, function(x) x[['A_AA']]$sigma))), vertical=T, method='jitter', pch=21, col='#00000022', ylim=c(0,1), ylab='fraction of phenotypic variance', group.names=c('A','AA', 'E'))
+boxplot(t(sapply(vc_multiple_components, function(x) x[['A_AA']]$sigma)), add=T, border='darkred', outline=FALSE, boxwex=.5, xaxt='n')
+
+stripchart(data.frame((do.call('rbind', sapply(vc_multiple_components, function(x) x[['local_distant']]$sigma)))), vertical=T, method='jitter', pch=21, col='#00000022', ylim=c(0,1), ylab='fraction of phenotypic variance',
+            group.names=c('local additive', 'distant additive', 'unmapped additive', 'local by genome, interactions', 'distant by genome, interactions', 'interactions between unmapped QTL', 'E')
+           )
+boxplot((do.call('rbind', sapply(vc_multiple_components, function(x) x[['local_distant']]$sigma))), add=T, border='darkred', outline=FALSE, boxwex=.5, xaxt='n')
 
 
-barplot(rowMeans(sapply(vc_multiple_components, function(x) x[['A_AA']]$sigma)))
-barplot(colMeans(do.call('rbind', sapply(vc_multiple_components, function(x) x[['QTL']]$sigma))))
-barplot(colMeans(do.call('rbind', sapply(vc_multiple_components, function(x) x[['local_distant']]$sigma))))
+stripchart(data.frame((do.call('rbind', sapply(vc_multiple_components, function(x) x[['QTL']]$sigma)))), vertical=T, method='jitter', pch=21, col='#00000022', ylim=c(0,1), ylab='fraction of phenotypic variance', 
+           group.names=c('additive QTL', 'unmapped additive', 'interaction QTL', 'unmapped interactions', 'E'))
+boxplot((do.call('rbind', sapply(vc_multiple_components, function(x) x[['QTL']]$sigma))),add=T, border='darkred', outline=FALSE, boxwex=.5 , xaxt='n')
 
+
+lds=do.call('rbind', sapply(vc_multiple_components, function(x) x[['local_distant']]$sigma))
+plot(vest[1,], vest[1,]+vest[2,], xlim=c(0,1), ylim=c(0,1))
+plot(lds[1,], type='l', col='#00000009', ylim=c(0,1))
+for(i in 1:2846) {
+points(lds[i,], type='l', col='#00000009', ylim=c(0,1))
+}
+
+str(qdf)

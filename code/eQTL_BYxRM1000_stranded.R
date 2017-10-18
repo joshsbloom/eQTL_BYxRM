@@ -58,6 +58,7 @@ names(OD.cov)=unlist(sapply(mOD, names), use.names=F)
 names(OD.cov)=paste(gsub('_1$', '', names(OD.cov)), rep(paste0('BYxRM_eQTL_', sprintf("%02d", 1:13)), each=96), sep='-')
 #-----------------------------------------------------------------------------------------------------------------------
 
+ocd=read.fasta('~/orf_coding.fasta')
 
 #load kallisto output -------------------------------------------------------------------------------------------
 # load transcript annotations -----------------------------------------------------------------------------------
@@ -198,13 +199,15 @@ OD.cov=OD.cov[mOS]
 # -------------------------------------------------------------------------------------------------------------------------------
 
 # Downsample counts -------------------------------------------------------------------------------------------------------------
+#downsample.2e6.count.matrix=downsampleCounts(count.matrix, 2e6, with.replacement=TRUE)
 downsample.1e6.count.matrix=downsampleCounts(count.matrix, 1e6)
 downsample.5e5.count.matrix=downsampleCounts(count.matrix, 5e5)
 downsample.1e5.count.matrix=downsampleCounts(count.matrix, 1e5)
 downsample.5e4.count.matrix=downsampleCounts(count.matrix, 5e4)
 
-downsample.count.matrices=list(
-                         'd1e6'=downsample.1e6.count.matrix,
+ #d2e6'=downsample.1e6.count.matrix,
+
+downsample.count.matrices=list('d1e6'=downsample.1e6.count.matrix,
                          'd5e5'=downsample.5e5.count.matrix,
                          'd1e5'=downsample.1e5.count.matrix,
                          'd5e4'=downsample.5e4.count.matrix)
@@ -222,7 +225,7 @@ downsample.tpm.matrices=lapply(downsample.count.matrices, function(y) {
 tpm.matrix=log2(apply(count.matrix,2, function(x) countToTpm(x, gene.annot.df$length))+0.5)
 
 #covariates.OD=model.matrix(t(tpm.matrix)[,1]~gbatch.fact+OD.cov)
-#residual.pheno.OD=scale(residuals(lm(t(tpm.matrix)~covariates.OD) ))
+#residual.pheno.OD=scale(residuals(lm(t.tpm.matrix~covariates.OD) ))
 #scanoneLODS=fasterLOD(nrow(residual.pheno.OD),residual.pheno.OD,gdata.scaled, betas=TRUE)
 
 #remove invariant transcripts-------------------------------------------------------------------------------------------------------
@@ -393,7 +396,7 @@ names(h2A.OD)=colnames(residual.pheno.OD)
            fill=c('black', 'blue', 'purple', 'green', 'red'))
     #dev.off()
 
-    plot(reads, c(mean(h2A.OD), apply(h2A.downsample,2, mean)), ylim=c(0,.5), xlab='reads per individual', ylab=expression(h^2), xlim=c(0,20e6), type='b')
+    plot(reads, c(mean(h2A.OD), apply(h2A.downsample,2, mean)), ylim=c(0,.5), xlab='reads per individual', ylab=expression(h^2), xlim=c(0,1e7), type='b')
     yin=as.numeric(c(mean(h2A.OD), apply(h2A.downsample,2, mean)))
     xin=reads
     nfit=nls(yin~d*xin/(b+xin))
@@ -532,6 +535,8 @@ cir=as.numeric(sapply(strsplit(sapply(strsplit(all.peaks.OD$CI.r, ':'), function
 median(abs(cir-cil)[all.peaks.OD$cis])
 
 # enrichment of local eQTL with interaction
+#chisq.test(rbind(c(2884*36498,36498^2), c(300,1464))) 0.07902
+
 #chisq.test(rbind(c(2884,36498), c(300,1464))) 0.07902
 #data:  rbind(c(2884, 36498), c(300, 1464))    0.2049
 #X-squared = 220, df = 1, p-value <2e-16
@@ -563,12 +568,13 @@ axis(side=4, at=seq(0,1, .2)*sf, labels= seq(0,1, .2))
 mtext(side = 4, line = 3, "power")
 
 
-
 #sum(unlist(sapply(peaks.per.gene.augmented, function(x) x$var.exp))<.02)
 #19603
+#df=data.frame(variance.explained=pvar, power.additive.n=n1000)[1:100,]
+#write.table(df[1:100,], file='~/Desktop/eQTL_power.txt', sep='\t', quote=F, row.names=F)
+x=peakModel[[4]]
+mNull=lm(pheno.scaled.OD~1)
+mFull=lm(pheno.scaled.OD~gdata[,x$pmarker[x$cis]])
 
 
-
-df=data.frame(variance.explained=pvar, power.additive.n=n1000)[1:100,]
-write.table(df[1:100,], file='~/Desktop/eQTL_power.txt', sep='\t', quote=F, row.names=F)
-
+#save.image('/data/eQTL/052417.RData')
