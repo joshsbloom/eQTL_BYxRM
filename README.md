@@ -1,8 +1,8 @@
-# 1000 BYxRM haploid yeast segregant eQTL analysis scripts and additional data #
+## 1000 BYxRM haploid yeast segregant eQTL analysis scripts and additional data ##
 see [Main Analysis](code/eQTL_BYxRM1000_stranded.R) for main analysis
 ___
 
-## additional data can be at the following links: ##
+### data can be at the following links: ###
 
 
 [Expression data (SI Data 1)] (https://drive.google.com/file/d/0B4EjgO02Xr8yN3NQY2cwQ0RaUDg/view?usp=sharing)
@@ -11,7 +11,9 @@ ___
 
 [results for per-hotspot GO enrichment results (SI Data 12)] (https://drive.google.com/file/d/0B4EjgO02Xr8yT3NXT1hhM3dnYlE/view?usp=sharing)
 
+___
 
+#### additional data can be found here: ####
 
 [RData/](https://drive.google.com/folderview?id=0ByJ-NQ1MGtWIUk9KRV9xNHJ6U1k) *R intermediate data structures*
 <!---
