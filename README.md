@@ -2,7 +2,7 @@
 see [Main Analysis](code/eQTL_BYxRM1000_stranded.R) for main analysis
 ___
 
-### data can be at the following links: ###
+### data can be found at the following links: ###
 
 
 [Expression data (SI Data 1)] (https://drive.google.com/file/d/0B4EjgO02Xr8yN3NQY2cwQ0RaUDg/view?usp=sharing)
