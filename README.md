@@ -1,9 +1,7 @@
 # Genetics of trans-regulatory variation in gene expression
-===========================================================
 ## code and data for 1000 BYxRM haploid yeast segregant eQTL mapping by Bloom and Albert
 
-
-see [Main Analysis](code/eQTL_BYxRM1000_stranded.R) for main analysis script
+see [eQTL_BYxRM1000_stranded.R](code/eQTL_BYxRM1000_stranded.R) for main analysis script
 ___
 
 Genotype data can be found here as an RData object
