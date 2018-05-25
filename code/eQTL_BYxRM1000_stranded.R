@@ -58,7 +58,7 @@ names(OD.cov)=unlist(sapply(mOD, names), use.names=F)
 names(OD.cov)=paste(gsub('_1$', '', names(OD.cov)), rep(paste0('BYxRM_eQTL_', sprintf("%02d", 1:13)), each=96), sep='-')
 #-----------------------------------------------------------------------------------------------------------------------
 
-ocd=read.fasta('~/orf_coding.fasta')
+#ocd=read.fasta('~/orf_coding.fasta')
 
 #load kallisto output -------------------------------------------------------------------------------------------
 # load transcript annotations -----------------------------------------------------------------------------------
@@ -126,8 +126,8 @@ match_pheno_and_geno=function(pheno_input_matrix, geno_matrix) {
 
 counts=match_pheno_and_geno(count.matrix, BYxRM_orig)
 #save(counts, file='/data/eQTL/RData/counts.RData')
+#load('/data/eQTL/RData/counts.RData')
 gdata=counts$gdata
-
 
 # Construct LD for full marker set -----------------------------------------------------------------------------------------
 #cvec=c(do.call('rbind', strsplit(colnames(gdata), ':'))[,1])
@@ -449,7 +449,7 @@ peakList.OD = mapQTL(covariates.OD, background.QTL.OD,
                   t.tpm.matrix, pheno.scaled.OD, gdata, gdata.scaled,
                   n.perm=1000, FDR.thresh=.05)
 ##save(peakList.OD, file='/data/eQTL/RData/peakList_batchOD.RData')
-load('/data/eQTL/RData/peakList_batchOD.RData')
+#load('/data/eQTL/RData/peakList_batchOD.RData')
 #-------------------------------------------------------------------------------------------------------------------------------------------
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -460,7 +460,7 @@ sum(sapply(sapply(peakList.OD, function(x) { sapply(x, function(y) nrow(y) ) } )
 #36498
 all.peaks.OD=buildPeakListDF(peakList.OD,gdata,gene.GR, marker.GR)
 #save(all.peaks.OD, file='/data/eQTL/RData/all_peaks_OD.RData')
-load('/data/eQTL/RData/all_peaks_OD.RData')
+#load('/data/eQTL/RData/all_peaks_OD.RData')
 load('/data/eQTL/RData/R_allPeaksODPad_161213.RData')
 all.peaks.OD=allPeaksODPad[,-c(14,15)]
 
@@ -517,14 +517,14 @@ median(h2Acv) #[h2Acv<1.5])
     #pars$u[,1:20]
     background.covariates=cbind(covariates.OD, pars$u[,1:20])
 
-# Do HOTSPOT analysis
+# DO HOTSPOT ANALYSIS
 #source('/data/eQTL/code/eQTL_Hotspots.R')
 
-# Build B
+# BUILD B
 #source('/data/eQTL/code/eQTL_BYxRM1000_makeB.R')
 
 
-#DO 2-LOCUS and additional VC analysis 
+#DO 2-LOCUS AND ADDITIONAL VC ANALYSIS 
 #source('/data/eQTL/code/eQTL_BYxRM1000_2Locus.R')
 load('/data/eQTL/RData/peaksModel.RData')
 
