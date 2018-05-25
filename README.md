@@ -1,4 +1,4 @@
-##Genetics of trans-regulatory variation in gene expression
+##Genetics of trans-regulatory variation in gene expression##
 ===========================================================
 # Code and data for 1000 BYxRM haploid yeast segregant eQTL mapping from Joshua Bloom and Frank Albert
 
@@ -8,7 +8,7 @@ ___
 
 Genotype data can be found here as an RData object
 ```r
-#After cloning git repo, in R
+#After cloning git repo, cd to local directory, load R, and then
 load('genotypes/gdata_42k.RData')
 # Structure of genotype data
 # 1012 haploid segregants (rows) X 42,052 markers (columns)
@@ -21,6 +21,6 @@ R> str(gdata)
   ..$ : chr [1:1012] "A01_01" "A01_02" "A01_03" "A01_04" ...
   ..$ : chr [1:42052] "chrI:33040_A/G" "chrI:33048_A/C" "chrI:33070_A/T" "chrI:33077_G/A" ... 
 ```
-Genotype data can be found here as an RData object
+Count data can be found here as an RData object
 
 
