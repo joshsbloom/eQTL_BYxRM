@@ -1,3 +1,6 @@
+# Code to demultiplex gz fastq files given sample sheets
+# Run for each batch and lane.identifier
+
 #mkdir -p /media/ramdisk
 #mount -t tmpfs -o size=32048M tmpfs /media/ramdisk/
 

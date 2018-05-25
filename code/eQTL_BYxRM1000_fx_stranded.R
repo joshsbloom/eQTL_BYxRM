@@ -715,6 +715,7 @@ buildPeakListDF=function(peakList.OD, gdata, gene.GR, marker.GR, peak.dist.cis=4
 
     all.peaks=do.call('rbind', lapply(peakList.OD, function(x) do.call('rbind', x)))
     all.peaks.g.C=    match(all.peaks$pmarker, colnames(gdata))
+    all.peaks.g.L=    match(all.peaks$CI.l, colnames(gdata))
     all.peaks.g.R=    match(all.peaks$CI.r, colnames(gdata))
     intv=Intervals(cbind(all.peaks.g.L, all.peaks.g.R))
     intv=intv[order(all.peaks.g.C),]

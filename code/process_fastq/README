@@ -1,0 +1,5 @@
+pipeline to turn raw fastq data into transcript counts with kallisto
+
+1) run dmux_qseq_fastq.R for each batch and sequencing lane
+2) run trim_adapters.sh for each sample to remove adapter sequence
+3) run run_kallisto_stranded_bootstraps.R to quantify transcript abundance with kallisto

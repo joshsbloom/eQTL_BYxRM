@@ -265,6 +265,146 @@ for(goi in names(lm.2D)) {
                )
 }
 lm.2D.df.long=do.call('rbind', lm.2D.df)
+
+
+
+# for supplementary table 040818
+lm.2D.2=list()
+for(goi in names(lm.2D)) {
+   print(goi) 
+    #goi='YAL039C'
+    #lm.2D[[goi]]
+    ppga=peaks.per.gene[[goi]]
+    lm.goi=lm.2D[[goi]]
+    aov.a = anova(lm.goi)
+    tssq  = sum(aov.a[,2])
+    a.effs=(aov.a[1:(nrow(aov.a)-1),2]/tssq)
+    c2d=coefficients(lm.goi)  
+    c2d=c2d[grep(':', names(c2d))]
+    vexp2d=a.effs[grep(':', rownames(aov.a))]
+    c2d.df=do.call('rbind', strsplit(names(c2d), ':'))
+    pmarker.mod=gsub('\\:|\\/', '.', ppga$pmarker)
+
+    m1.ind=match(c2d.df[,1], pmarker.mod)
+    m2.ind=match(c2d.df[,2], pmarker.mod)
+    csl=coefficients(summary(lm.goi))
+    csli=grep(':', rownames(csl))
+    lm.2D.2[[goi]]=data.frame(
+               trait=ppga$gene[m1.ind],
+               m1_pmarker=ppga$pmarker[m1.ind],
+               m1_beta=coefficients(lm.goi)[m1.ind],
+               m1_variance_explained=a.effs[m1.ind],
+               m1_p=csl[m1.ind,4],
+               m1_is_cis=ppga$cis[m1.ind],
+               m2_pmarker=ppga$pmarker[m2.ind],
+               m2_beta=coefficients(lm.goi)[m2.ind],
+               m2_variance_explained=a.effs[m2.ind],
+               m2_p=csl[m2.ind,4],
+               m2_is_cis=ppga$cis[m2.ind],
+               interaction_beta=as.numeric(c2d),
+               interaction_variance_explained=as.numeric(vexp2d),
+               interaction_p=csl[csli,4]
+               )
+}
+lm2D_between_additive=do.call('rbind', lm.2D.2)
+
+save(lm2D_between_additive,file='/data/eQTL/RData/lm2D_between_additive.RData')
+
+m1=data.table::tstrsplit(full2d.table$m1, '_|:', type.convert=T)
+m2=data.table::tstrsplit(full2d.table$m2, '_|:', type.convert=T)
+names(m1)=c('chr','start','var')
+names(m2)=c('chr','start','var')
+m1$end=m1$start
+m2$end=m2$start
+
+f2d.tchr=as.character(seqnames(gene.GR)[match(full2d.table$trait, gene.GR$ORF)])
+f2d.tpos=start(gene.GR)[match(full2d.table$trait, gene.GR$ORF)]
+full2d.table$m1.cis=(f2d.tchr==m1$chr & abs(f2d.tpos-m1$start)<5e4)  
+full2d.table$m2.cis=(f2d.tchr==m2$chr & abs(f2d.tpos-m2$start)<5e4)
+
+f2dts=list();
+#split(full2d.table, full2d.table$trait)
+for(i in 1:nrow(full2d.table)) {
+    #i=1
+    x=full2d.table[i,]
+    yr=pheno.scaled.OD[,x$trait]
+    pmarkers=unique(c(x$m1, x$m2))
+    apeaks=match(pmarkers, colnames(gdata))
+    X=data.frame(gdata[,apeaks])
+    lm.goi=lm(yr~.^2-1,data=X)
+    aov.a = anova(lm.goi)
+    tssq  = sum(aov.a[,2])
+    a.effs=(aov.a[1:(nrow(aov.a)-1),2]/tssq)
+    csl=coefficients(summary(lm.goi))
+   f2dts[[i]]=data.frame(trait=x$trait,
+               m1_pmarker=x$m1,
+               m1_beta=coef(lm.goi)[1],
+               m1_variance_explained=a.effs[1],
+               m1_p=csl[1,4],
+               m1_is_cis=x$m1.cis,
+               m2_pmarker=x$m2,
+               m2_beta=coef(lm.goi)[2],
+               m2_variance_explained=a.effs[2],
+               m2_p=csl[2,4],
+               m2_is_cis=x$m2.cis,
+               interaction_beta=coef(lm.goi)[3],
+               interaction_variance_explained=a.effs[3],
+               interaction_p=csl[3,4])
+}
+lm2D_from_full=do.call('rbind', f2dts)
+#save(lm2D_from_full,file='/data/eQTL/RData/lm2D_full.RData')
+
+library(tidyr)
+m1=data.table::tstrsplit(marginal2d.table$m1, '_|:', type.convert=T)
+m2=data.table::tstrsplit(marginal2d.table$m2, '_|:', type.convert=T)
+names(m1)=c('chr','start','var')
+names(m2)=c('chr','start','var')
+m1$end=m1$start
+m2$end=m2$start
+
+m2d.tchr=as.character(seqnames(gene.GR)[match(marginal2d.table$trait, gene.GR$ORF)])
+m2d.tpos=start(gene.GR)[match(marginal2d.table$trait, gene.GR$ORF)]
+marginal2d.table$m1.cis=(m2d.tchr==m1$chr & abs(m2d.tpos-m1$start)<5e4)  
+marginal2d.table$m2.cis=(m2d.tchr==m2$chr & abs(m2d.tpos-m2$start)<5e4)
+
+
+# add in code to reformat marginal table
+m2dts=list();
+#split(full2d.table, full2d.table$trait)
+for(i in 1:nrow(marginal2d.table)) {
+    #i=1
+    print(i)
+    x=marginal2d.table[i,]
+    yr=pheno.scaled.OD[,x$trait]
+    pmarkers=unique(c(x$m1, x$m2))
+    apeaks=match(pmarkers, colnames(gdata))
+    X=data.frame(gdata[,apeaks])
+    lm.goi=lm(yr~.^2-1,data=X)
+    aov.a = anova(lm.goi)
+    tssq  = sum(aov.a[,2])
+    a.effs=(aov.a[1:(nrow(aov.a)-1),2]/tssq)
+    csl=coefficients(summary(lm.goi))
+   m2dts[[i]]=data.frame(trait=x$trait,
+               m1_pmarker=x$m1,
+               m1_beta=coef(lm.goi)[1],
+               m1_variance_explained=a.effs[1],
+               m1_p=csl[1,4],
+               m1_is_cis=x$m1.cis,
+               m2_pmarker=x$m2,
+               m2_beta=coef(lm.goi)[2],
+               m2_variance_explained=a.effs[2],
+               m2_p=csl[2,4],
+               m2_is_cis=x$m2.cis,
+               interaction_beta=coef(lm.goi)[3],
+               interaction_variance_explained=a.effs[3],
+               interaction_p=csl[3,4])
+}
+lm2D_from_marginal=do.call('rbind', m2dts)
+save(lm2D_from_marginal,file='/data/eQTL/RData/lm2D_marginal.RData')
+
+
+
+
 cint=cbind(lm.2D.df.long$m2.gcoord,lm.2D.df.long$m1.gcoord)
 cint=t(apply(cint,1, function(x) if(x[1]<x[2]) {return(x)} else { return(rev(x)) }))
 
@@ -398,4 +538,3 @@ for(i in 1:2846) {
 points(lds[i,], type='l', col='#00000009', ylim=c(0,1))
 }
 
-str(qdf)

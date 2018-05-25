@@ -550,7 +550,7 @@ n1000 = power.t.test(n=506,  delta=seq(0.01,10,.01),sig.level=siglev)$power
 #n1000.int = power.t.test(n=506,  delta=seq(0.01,10,.01),sig.level=siglev.int)$power
 pvar= prop.var('ri', dd/2,1)
 plot(pvar,n1000, type='l',col='blue',lwd=2)
-points(pvar,n1000.int, type='l',col='blue',lwd=2,lty=2)
+#points(pvar,n1000.int, type='l',col='blue',lwd=2,lty=2)
 
 dtrans=density(unlist(sapply(peaksModel, function(x) x$var.exp.Resid[!x$cis] )))
 dcis=density(unlist(sapply(peaksModel, function(x) x$var.exp.Resid[x$cis] ) ))
