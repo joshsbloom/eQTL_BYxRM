@@ -4,16 +4,17 @@
 see [eQTL_BYxRM1000_stranded.R](code/eQTL_BYxRM1000_stranded.R) for main analysis script
 ___
 
-genotype and raw transcript count data can be found here as an RData object
+genotype and raw transcript count data can be found [here](RData/counts.RData) as an RData object
 ```r
 #After cloning git repo, cd to local directory, load R, and then
 load('RData/counts.RData')
 # Structure of phenotype data (counts$pheno)
 # 6,713 transcripts (rows) X 1012 haploid segregants (columns)
+#
 # Structure of genotype data (counts$gdata)
 # 1012 haploid segregants (rows) X 42,052 markers (columns)
 # -1 indicates BY allele, +1 indicates RM allele
-# column names indicate chromosome:position_BYvariant/RMvaiant
+# column names indicate chromosome:position_BYvariant/RMvariant
 # postitions are based on the S.Cerevisiae SacCer3 genome build
 R> str(counts)
 List of 2
@@ -26,6 +27,6 @@ List of 2
   .. ..$ : chr [1:1012] "A01_01" "A01_02" "A01_03" "A01_04" ...
   .. ..$ : chr [1:42052] "chrI:33040_A/G" "chrI:33048_A/C" "chrI:33070_A/T" "chrI:33077_G/A" ...
 ```
-
+processed and filtered tpm values per transcrip can be found here
 
 
