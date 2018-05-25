@@ -5,6 +5,7 @@ see [eQTL_BYxRM1000_stranded.R](code/eQTL_BYxRM1000_stranded.R) for main analysi
 ___
 
 genotype and raw transcript count data can be found [here](RData/counts.RData) as an RData object
+
 ```r
 #After cloning git repo, cd to local directory, load R, and then
 load('RData/counts.RData')
@@ -27,7 +28,7 @@ List of 2
   .. ..$ : chr [1:1012] "A01_01" "A01_02" "A01_03" "A01_04" ...
   .. ..$ : chr [1:42052] "chrI:33040_A/G" "chrI:33048_A/C" "chrI:33070_A/T" "chrI:33077_G/A" ...
 ```
-processed and filtered tpm values per transcript can be found [here] (RData/log2_t.tpm.matrix.RData) as an RData object
+processed and filtered log2(tpm+0.5) values per transcript can be found [here](RData/log2_t.tpm.matrix.RData) as an RData object
 
 ```r
 load('RData/log2_t.tpm.matrix.RData')
