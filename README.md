@@ -28,6 +28,7 @@ List of 2
   .. ..$ : chr [1:42052] "chrI:33040_A/G" "chrI:33048_A/C" "chrI:33070_A/T" "chrI:33077_G/A" ...
 ```
 processed and filtered tpm values per transcript can be found [here] (RData/log2_t.tpm.matrix.RData) as an RData object
+
 ```r
 load('RData/log2_t.tpm.matrix.RData')
 R> str(t.tpm.matrix)
@@ -35,4 +36,4 @@ R> str(t.tpm.matrix)
  - attr(*, "dimnames")=List of 2
   ..$ : chr [1:1012] "A01_01-A01-A1-BYxRM_eQTL_10-H6" "A01_02-A01-A2-BYxRM_eQTL_11-F3" "A01_03-A01-A3-BYxRM_eQTL_11-C6" "A01_04-A01-A4-BYxRM_eQTL_03-G2" ...
   ..$ : chr [1:5720] "YAL062W" "YAL061W" "YAL060W" "YAL059W" ...
-
+```
