@@ -28,7 +28,7 @@ List of 2
   .. ..$ : chr [1:1012] "A01_01" "A01_02" "A01_03" "A01_04" ...
   .. ..$ : chr [1:42052] "chrI:33040_A/G" "chrI:33048_A/C" "chrI:33070_A/T" "chrI:33077_G/A" ...
 ```
-processed and filtered log2(tpm+0.5) values per transcript can be found [here](RData/log2_t.tpm.matrix.RData) as an RData object
+processed and filtered log2(TPM+0.5) values per transcript can be found [here](RData/log2_t.tpm.matrix.RData) as an RData object
 
 ```r
 load('RData/log2_t.tpm.matrix.RData')
@@ -39,7 +39,7 @@ R> str(t.tpm.matrix)
   ..$ : chr [1:5720] "YAL062W" "YAL061W" "YAL060W" "YAL059W" ...
 ```
 
-additional batch and growth covariates
+additional batch and growth covariates can be found [here](RData/covariates.OD.RData)
 ```r
 R> load('RData/covariates.OD.RData')
 R> str(covariates.OD)
@@ -51,3 +51,5 @@ R> str(covariates.OD)
  - attr(*, "contrasts")=List of 1
   ..$ gbatch.fact: chr "contr.treatment"
 ```
+
+see [process_fastq](code/process_fastq) for scripts to turn gzipped fastq files from SRA into transcript abundances
